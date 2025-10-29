@@ -13,12 +13,14 @@ const NodeCache = require('node-cache');
 const { router: adminRoutes, setPool: setAdminPool } = require('./adminRoutes');
 const { router: uploadRouter, setPool: setUploadPool } = require('./uploadRoutes');
 
+
+
 // Create database pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: process.env.DATABASE_URL?.includes('supabase.co') 
+    ? { rejectUnauthorized: false } 
+    : false
 });
 
 // Test connection on startup
