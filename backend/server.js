@@ -48,7 +48,9 @@ const cache = new NodeCache({ stdTTL: 10 });
 // Middleware
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://your-app-name.vercel.app'  // Update with your actual Vercel URL
+  'http://localhost:3000',
+  'https://exam-management-system-1-tksh.onrender.com', // Your backend URL
+  'https://exam-management-system-74ix.vercel.app/' // Replace with your actual Vercel URL
 ];
 
 
