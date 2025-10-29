@@ -1141,7 +1141,7 @@ useEffect(() => {
               </div>
             </div>
 
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 mb-2">
+            <div className="grid grid-cols-7 gap-1 mb-2">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
                 <div key={day} className="text-center font-semibold text-gray-600 py-1 text-xs sm:text-sm">
                   {day}
@@ -1149,7 +1149,7 @@ useEffect(() => {
               ))}
             </div>
 
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 mb-4">
+            <div className="grid grid-cols-7 gap-1 mb-4">
               {days.map((day, idx) => {
                 if (!day) {
                   return <div key={idx}></div>;
