@@ -1490,8 +1490,10 @@ useEffect(() => {
 
                       {/* Sessions table */}
                       {/* ✅ Compact, responsive sessions table */}
-<div className="overflow-hidden rounded-lg border border-gray-200">
+{/* Table layout — hidden on mobile */}
+<div className="hidden sm:block overflow-hidden rounded-lg border border-gray-200">
   <table className="w-full text-sm sm:text-base text-gray-700">
+
     <thead className="bg-indigo-50">
       <tr className="text-left text-gray-700">
         <th className="px-2 sm:px-4 py-2 sm:py-3 font-semibold">Course</th>
