@@ -1,6 +1,5 @@
 // server.js
 // server.js
-
 const express = require('express');
 const app = express();
 const { Pool } = require('pg');
@@ -19,17 +18,40 @@ console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
 console.log('DATABASE_URL preview:', process.env.DATABASE_URL?.substring(0, 50));
 
-// Create database pool with explicit connection parameters
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('supabase.co') 
-    ? { rejectUnauthorized: false } 
-    : false,
-  // Force IPv4 for Render/Supabase compatibility
-  host: process.env.DATABASE_URL?.includes('supabase.co') 
-    ? 'db.giwotdvcutowyhlyfmjb.supabase.co' 
-    : undefined
-});
+// Helper to parse connection string and force IPv4
+const parseConnectionString = (url) => {
+  const match = url.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+  if (match) {
+    return {
+      user: match[1],
+      password: match[2],
+      host: match[3],
+      port: parseInt(match[4]),
+      database: match[5]
+    };
+  }
+  return null;
+};
+
+// Create database pool with IPv4 forcing for Supabase
+let poolConfig;
+if (process.env.DATABASE_URL?.includes('supabase.co')) {
+  const parsed = parseConnectionString(process.env.DATABASE_URL);
+  poolConfig = {
+    ...parsed,
+    ssl: { rejectUnauthorized: false },
+    family: 4 // Force IPv4 to avoid ENETUNREACH error
+  };
+  console.log('🔧 Using parsed Supabase config with IPv4');
+} else {
+  poolConfig = {
+    connectionString: process.env.DATABASE_URL,
+    ssl: false
+  };
+  console.log('🔧 Using local database config');
+}
+
+const pool = new Pool(poolConfig);
 
 // Test connection on startup
 pool.connect((err, client, release) => {
@@ -58,7 +80,7 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'https://exam-management-system-1-tksh.onrender.com',
-  'https://exam-management-system-74ix.vercel.app/', // Add your Vercel URL
+  'https://exam-management-system-74ix.vercel.app',
 ];
 
 app.use(cors({
@@ -72,7 +94,6 @@ app.use(cors({
   },
   credentials: true
 }));
-
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
