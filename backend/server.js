@@ -1,9 +1,5 @@
 // server.js
-
-// Only load .env in development, not in production
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
-}
+// server.js
 
 const express = require('express');
 const app = express();
@@ -13,14 +9,26 @@ const NodeCache = require('node-cache');
 const { router: adminRoutes, setPool: setAdminPool } = require('./adminRoutes');
 const { router: uploadRouter, setPool: setUploadPool } = require('./uploadRoutes');
 
+// Only load dotenv in local development
+if (!process.env.DATABASE_URL) {
+  require('dotenv').config();
+}
 
+console.log('🔍 Environment Check:');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+console.log('DATABASE_URL preview:', process.env.DATABASE_URL?.substring(0, 50));
 
-// Create database pool
+// Create database pool with explicit connection parameters
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL?.includes('supabase.co') 
     ? { rejectUnauthorized: false } 
-    : false
+    : false,
+  // Force IPv4 for Render/Supabase compatibility
+  host: process.env.DATABASE_URL?.includes('supabase.co') 
+    ? 'db.giwotdvcutowyhlyfmjb.supabase.co' 
+    : undefined
 });
 
 // Test connection on startup
@@ -45,26 +53,27 @@ setUploadPool(pool);
 
 const cache = new NodeCache({ stdTTL: 10 });
 
-// Middleware
+// CORS configuration
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://exam-management-system-1-tksh.onrender.com', // Your backend URL
-  'https://exam-management-system-74ix.vercel.app/' // Replace with your actual Vercel URL
+  'https://exam-management-system-1-tksh.onrender.com',
+  'https://exam-management-system-74ix.vercel.app/', // Add your Vercel URL
 ];
 
-
-
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `CORS policy does not allow access from origin ${origin}`;
+      return callback(new Error(msg), false);
     }
+    return callback(null, true);
   },
   credentials: true
 }));
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
