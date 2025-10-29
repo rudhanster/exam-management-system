@@ -1,4 +1,10 @@
 // server.js
+
+// Only load .env in development, not in production
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
+
 const express = require('express');
 const app = express();
 const { Pool } = require('pg');
@@ -12,14 +18,27 @@ const { router: uploadRouter, setPool: setUploadPool } = require('./uploadRoutes
 // Load environment variables FIRST
 dotenv.config();
 
+const { Pool } = require('pg');
+{/*
 // Create database pool
 const pool = new Pool({
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
+  connectionString: process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
+
+// Test connection on startup
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('❌ Database connection error:', err.message);
+  } else {
+    console.log('✅ Database connected successfully');
+    release();
+  }
+});*/}
+
+
+
+module.exports = pool;
 
 
 
@@ -42,7 +61,22 @@ setAdminPool(pool);
 const cache = new NodeCache({ stdTTL: 10 });
 
 // Middleware
-app.use(cors());
+// NEW (production-ready)
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://your-app-name.vercel.app'  // Add after Vercel deployment
+];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
