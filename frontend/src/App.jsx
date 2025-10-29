@@ -28,6 +28,15 @@ const FACULTY_LIST = [
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
+    // ✅ Collapsible session blocks for faculty view
+  const [openBlocks, setOpenBlocks] = useState({});
+  const toggleBlock = (timeRange) => {
+    setOpenBlocks((prev) => ({
+      ...prev,
+      [timeRange]: !prev[timeRange],
+    }));
+  };
+
   const [adminView, setAdminView] = useState('dashboard');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -1473,143 +1482,195 @@ useEffect(() => {
                     ([timeA], [timeB]) => timeA.localeCompare(timeB)
                   );
 
-                  return sortedTimeGroups.map(([startTime, sessions]) => (
-                    <div key={startTime} className="border-2 border-gray-200 rounded-lg overflow-hidden">
-                      {/* Time header */}
-                      <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-3">
-                        <div className="flex items-center gap-2 text-white">
-                          <Clock className="w-5 h-5" />
-                          <h4 className="text-lg font-bold">
-                            {startTime.substring(0, 5)} - {sessions[0].end_time.substring(0, 5)}
-                          </h4>
-                          <span className="ml-auto text-sm bg-white bg-opacity-20 px-3 py-1 rounded-full">
-                            {sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}
-                          </span>
-                        </div>
-                      </div>
+                  return sortedTimeGroups.map(([startTime, sessions]) => {
+  const timeRange = `${startTime.substring(0, 5)} - ${sessions[0].end_time.substring(0, 5)}`;
+  const isOpen = !!openBlocks[timeRange];
 
-                      {/* Sessions table */}
-                      {/* ✅ Compact, responsive sessions table */}
-{/* Table layout — hidden on mobile */}
-<div className="hidden sm:block overflow-hidden rounded-lg border border-gray-200">
-  <table className="w-full text-sm sm:text-base text-gray-700">
+  return (
+    <div key={timeRange} className="rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      {/* Header */}
+      <button
+        onClick={() => toggleBlock(timeRange)}
+        className="w-full flex justify-between items-center bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-3 text-white font-semibold hover:opacity-90 transition"
+      >
+        <div className="flex items-center gap-2">
+          <Clock className="w-5 h-5" />
+          <span>{timeRange}</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <span className="bg-white/20 px-2 py-0.5 rounded-full">
+            {sessions.length} session{sessions.length > 1 ? "s" : ""}
+          </span>
+          <ChevronRight
+            className={`w-5 h-5 transform transition-transform ${isOpen ? "rotate-90" : ""}`}
+          />
+        </div>
+      </button>
 
-    <thead className="bg-indigo-50">
-      <tr className="text-left text-gray-700">
-        <th className="px-2 sm:px-4 py-2 sm:py-3 font-semibold">Course</th>
-        <th className="px-2 sm:px-4 py-2 sm:py-3 font-semibold">Code</th>
-        <th className="px-2 sm:px-4 py-2 sm:py-3 font-semibold">Exam</th>
-        <th className="px-2 sm:px-4 py-2 sm:py-3 font-semibold text-center">Free</th>
-        <th className="px-2 sm:px-4 py-2 sm:py-3 font-semibold text-center">Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      {sessions.map((session) => {
-        const conflictInfo = conflicts?.[session.id];
-        const hasConflict = conflictInfo?.hasConflict === true;
-        const isFull = Number(session.free_slots) === 0;
-        const isPriority = isPrioritySession(session);
-        const canPick = !isFull && !hasConflict;
+      {/* Collapsible Body */}
+      <div
+        className={`transition-all duration-300 ease-in-out ${
+          isOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"
+        } overflow-hidden`}
+      >
+        {/* ✅ Desktop Table View */}
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="w-full text-sm text-gray-700">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold">Course</th>
+                <th className="px-4 py-3 text-left font-semibold">Code</th>
+                <th className="px-4 py-3 text-left font-semibold">Exam</th>
+                <th className="px-4 py-3 text-center font-semibold">Free</th>
+                <th className="px-4 py-3 text-center font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((session) => {
+                const conflictInfo = conflicts?.[session.id];
+                const hasConflict = conflictInfo?.hasConflict === true;
+                const isFull = Number(session.free_slots) === 0;
+                const isPriority = isPrioritySession(session);
+                const canPick = !isFull && !hasConflict;
 
-        return (
-          <tr
-            key={session.id}
-            className={`border-b hover:bg-gray-50 ${
-              hasConflict
-                ? 'bg-red-50 border-l-4 border-red-500'
-                : isPriority
-                ? 'bg-yellow-50 border-l-4 border-yellow-400'
-                : ''
-            }`}
-          >
-            <td className="px-2 sm:px-4 py-2 sm:py-3 font-medium text-gray-800">
-              <div className="flex items-center gap-1 sm:gap-2">
-                {isPriority && (
-                  <span className="text-yellow-500">
-                    <svg className="w-3 h-3 fill-current" viewBox="0 0 20 20">
-                      <path d="M10 1.5l2.39 6.62H19l-4.83 3.67L15.78 19 10 15.27 4.22 19l1.61-7.21L1 8.12h6.61z" />
-                    </svg>
-                  </span>
-                )}
-                <span className="truncate max-w-[120px] sm:max-w-none">{session.course_name}</span>
-              </div>
-            </td>
-            <td className="px-2 sm:px-4 py-2 sm:py-3 text-gray-600 whitespace-nowrap">{session.course_code}</td>
-            <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap">
-              <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-semibold">
-                {session.exam_type_name}
-              </span>
-            </td>
-            <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">
-              <span className={`px-2 sm:px-3 py-1 rounded-full font-semibold text-xs sm:text-sm ${
-                session.free_slots > 0
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {session.free_slots}
-              </span>
-            </td>
-            <td className="px-2 sm:px-4 py-2 sm:py-3 text-center">
-              <button
-                onClick={() => handlePickDuty(session.id)}
-                disabled={
-                  !canPick ||
-                  loading ||
-                  (selectedExamType &&
-                    new Date() > new Date(selectedExamType.selection_deadline))
-                }
-                className={`text-xs sm:text-sm font-semibold py-1.5 sm:py-2 px-2 sm:px-3 rounded-md transition shadow-sm ${
+                return (
+                  <tr
+                    key={session.id}
+                    className={`border-b hover:bg-gray-50 ${
+                      hasConflict
+                        ? "bg-red-50 border-l-4 border-red-500"
+                        : isPriority
+                        ? "bg-yellow-50 border-l-4 border-yellow-400"
+                        : ""
+                    }`}
+                  >
+                    <td className="px-4 py-3 font-medium text-gray-800 flex items-center gap-2">
+                      {isPriority && (
+                        <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                      )}
+                      <span className="truncate">{session.course_name}</span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                      {session.course_code}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-semibold">
+                        {session.exam_type_name}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span
+                        className={`px-3 py-1 rounded-full font-semibold text-sm ${
+                          session.free_slots > 0
+                            ? "bg-green-100 text-green-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {session.free_slots}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => handlePickDuty(session.id)}
+                        disabled={
+                          !canPick ||
+                          loading ||
+                          (selectedExamType &&
+                            new Date() > new Date(selectedExamType.selection_deadline))
+                        }
+                        className={`text-xs sm:text-sm font-semibold py-1.5 sm:py-2 px-3 sm:px-4 rounded-md shadow-sm transition ${
+                          hasConflict
+                            ? "bg-red-600 text-white cursor-not-allowed"
+                            : isFull
+                            ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                            : isPriority
+                            ? "bg-yellow-500 hover:bg-yellow-600 text-white"
+                            : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                        }`}
+                      >
+                        {hasConflict
+                          ? "⚠ Conflict"
+                          : isFull
+                          ? "Full"
+                          : isPriority
+                          ? "⭐ Pick"
+                          : "Pick"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* ✅ Mobile Compact Card View */}
+        <div className="sm:hidden divide-y divide-gray-200">
+          {sessions.map((session) => {
+            const conflictInfo = conflicts?.[session.id];
+            const hasConflict = conflictInfo?.hasConflict === true;
+            const isFull = Number(session.free_slots) === 0;
+            const isPriority = isPrioritySession(session);
+            const canPick = !isFull && !hasConflict;
+
+            return (
+              <div
+                key={session.id}
+                className={`p-3 text-sm ${
                   hasConflict
-                    ? 'bg-red-600 text-white cursor-not-allowed'
-                    : isFull
-                    ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                    ? "bg-red-50 border-l-4 border-red-500"
                     : isPriority
-                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    ? "bg-yellow-50 border-l-4 border-yellow-400"
+                    : "bg-white"
                 }`}
               >
-                {hasConflict
-                  ? '⚠ Conflict'
-                  : isFull
-                  ? 'Full'
-                  : isPriority
-                  ? '⭐ Pick'
-                  : 'Pick'}
-              </button>
-            </td>
-          </tr>
-        );
-      })}
-    </tbody>
-  </table>
-
-  {/* ✅ Mobile compact cards (hidden on sm+) */}
-  <div className="sm:hidden divide-y divide-gray-200">
-    {sessions.map((session) => (
-      <div key={session.id} className="p-3 flex flex-col gap-1 text-sm">
-        <div className="flex justify-between">
-          <span className="font-semibold text-gray-800">{session.course_name}</span>
-          <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">
-            {session.exam_type_name}
-          </span>
+                <div className="flex justify-between">
+                  <span className="font-semibold text-gray-800">
+                    {session.course_name}
+                  </span>
+                  <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">
+                    {session.exam_type_name}
+                  </span>
+                </div>
+                <div className="flex justify-between text-gray-600 text-xs mt-1">
+                  <span>{session.course_code}</span>
+                  <span>{session.free_slots} free</span>
+                </div>
+                <button
+                  onClick={() => handlePickDuty(session.id)}
+                  disabled={
+                    !canPick ||
+                    loading ||
+                    (selectedExamType &&
+                      new Date() > new Date(selectedExamType.selection_deadline))
+                  }
+                  className={`mt-2 w-full text-xs font-semibold py-1.5 rounded transition shadow-sm ${
+                    hasConflict
+                      ? "bg-red-600 text-white cursor-not-allowed"
+                      : isFull
+                      ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                      : isPriority
+                      ? "bg-yellow-500 hover:bg-yellow-600 text-white"
+                      : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                  }`}
+                >
+                  {hasConflict
+                    ? "⚠ Conflict"
+                    : isFull
+                    ? "Full"
+                    : isPriority
+                    ? "⭐ Pick"
+                    : "Pick"}
+                </button>
+              </div>
+            );
+          })}
         </div>
-        <div className="flex justify-between text-gray-600 text-xs">
-          <span>{session.course_code}</span>
-          <span>{session.free_slots} free</span>
-        </div>
-        <button
-          onClick={() => handlePickDuty(session.id)}
-          className="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-1.5 rounded"
-        >
-          Pick
-        </button>
       </div>
-    ))}
-  </div>
-</div>
+    </div>
+  );
+});
 
-                    </div>
-                  ));
                 })()}
               </div>
             )}
