@@ -7,7 +7,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 const express = require('express');
 const app = express();
-
+const { Pool } = require('pg');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const NodeCache = require('node-cache');
@@ -18,7 +18,7 @@ const { router: uploadRouter, setPool: setUploadPool } = require('./uploadRoutes
 // Load environment variables FIRST
 dotenv.config();
 
-const { Pool } = require('pg');
+
 {/*
 // Create database pool
 const pool = new Pool({
