@@ -7,7 +7,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 const express = require('express');
 const app = express();
-const { Pool } = require('pg');
+
 const cors = require('cors');
 const dotenv = require('dotenv');
 const NodeCache = require('node-cache');
