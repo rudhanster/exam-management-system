@@ -5,7 +5,8 @@ import ExcelUpload from './ExcelUpload.jsx';
 import { Plus, Edit2, Trash2, X, Save, Calendar, BookOpen, Users, Building, Clock, Info, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const API_URL = 'http://localhost:4000/api';
+import config from './config'; // Adjust path based on file location
+const API_URL = config.apiUrl;
 
 export default function AdminManagement() {
   const [activeTab, setActiveTab] = useState('exam-types');

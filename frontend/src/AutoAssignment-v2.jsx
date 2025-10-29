@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Zap, Users, CheckCircle, AlertTriangle, Info, X, Play, RefreshCw, TrendingUp, Calendar } from 'lucide-react';
 
-const API_URL = 'http://localhost:4000/api';
+import config from './config'; // Adjust path based on file location
+const API_URL = config.apiUrl;
 
 function AutoAssignmentV2() {
   const [examTypes, setExamTypes] = useState([]);

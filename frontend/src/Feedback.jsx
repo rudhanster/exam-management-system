@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { MessageSquare, X, Send, Star } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:4000/api';
+import config from './config'; // Adjust path based on file location
+const API_URL = config.apiUrl;
 
 export default function Feedback({ currentUser }) {
   const [showModal, setShowModal] = useState(false);

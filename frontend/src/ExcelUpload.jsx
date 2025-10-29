@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Upload, X, FileSpreadsheet, CheckCircle, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:4000/api';
+import config from './config'; // Adjust path based on file location
+const API_URL = config.apiUrl;
 
 const ExcelUpload = ({ onUploadSuccess }) => {
   const [file, setFile] = useState(null);

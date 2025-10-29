@@ -5,7 +5,8 @@ import Feedback from './Feedback.jsx';
 import Credits from './Credits.jsx';
 import AdminFeedbackViewer from './AdminFeedbackViewer.jsx';
 
-const API_URL = 'http://localhost:4000/api';
+import config from './config'; // Adjust path based on file location
+const API_URL = config.apiUrl;
 
 export default function AdminPanel() {
   const [allSessions, setAllSessions] = useState([]);

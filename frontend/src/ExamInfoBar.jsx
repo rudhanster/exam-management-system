@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Info, CalendarDays, Clock } from 'lucide-react';
 
-const API_URL = 'http://localhost:4000/api';
+import config from './config'; // Adjust path based on file location
+const API_URL = config.apiUrl;
 
 export default function ExamInfoBar({ selectedExamType }) {
   const [examInfo, setExamInfo] = useState(null);

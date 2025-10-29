@@ -4,7 +4,8 @@ import { Download, FileText, Calendar, Users, Building, AlertCircle, BarChart3, 
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 
-const API_URL = 'http://localhost:4000/api';
+import config from './config'; // Adjust path based on file location
+const API_URL = config.apiUrl;
 
 const reportTypes = [
   { id: 'faculty-duties', label: 'Faculty Duties', icon: <Users className="w-5 h-5" /> },
