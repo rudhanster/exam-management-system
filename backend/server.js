@@ -9,63 +9,47 @@ const express = require('express');
 const app = express();
 const { Pool } = require('pg');
 const cors = require('cors');
-const dotenv = require('dotenv');
 const NodeCache = require('node-cache');
 const { router: adminRoutes, setPool: setAdminPool } = require('./adminRoutes');
 const { router: uploadRouter, setPool: setUploadPool } = require('./uploadRoutes');
 
-
-// Load environment variables FIRST
-dotenv.config();
-
-
-{/*
 // Create database pool
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || `postgresql://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 // Test connection on startup
 pool.connect((err, client, release) => {
   if (err) {
-    console.error('❌ Database connection error:', err.message);
+    console.error('❌ Database connection failed:', err.message);
   } else {
     console.log('✅ Database connected successfully');
+    console.log('📊 Database:', client.database);
     release();
   }
-});*/}
-
-
-
-module.exports = pool;
-
-
+});
 
 // Pool error handling
 pool.on('error', (err) => {
   console.error('❌ Unexpected error on idle client', err);
 });
 
-// Test database connection
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('❌ Database connection failed:', err.message);
-  } else {
-    console.log('✅ Database connected successfully');
-  }
-});
-
+// Set pool for routes
 setAdminPool(pool);
+setUploadPool(pool);
 
 const cache = new NodeCache({ stdTTL: 10 });
 
 // Middleware
-// NEW (production-ready)
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://your-app-name.vercel.app'  // Add after Vercel deployment
+  'https://your-app-name.vercel.app'  // Update with your actual Vercel URL
 ];
+
+
 
 app.use(cors({
   origin: function(origin, callback) {
