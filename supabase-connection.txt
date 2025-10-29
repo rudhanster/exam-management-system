@@ -1,0 +1,13 @@
+# Supabase Connection Details
+Project URL: https://giwotdvcutowyhlyfmjb.supabase.co
+Database Password: exam_pass
+
+Connection String (for Render):
+postgresql://postgres:exam_pass@db.giwotdvcutowyhlyfmjb.supabase.co:5432/postgres
+
+Direct Connection:
+Host: db.giwotdvcutowyhlyfmjb.supabase.co
+Port: 5432
+Database: postgres
+User: postgres
+Password: exam_pass
