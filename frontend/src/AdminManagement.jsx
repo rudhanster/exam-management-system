@@ -300,7 +300,7 @@ const mapItemToForm = (item) => {
   // -------------------------
   // Submit / Delete handlers
   // -------------------------
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
@@ -335,12 +335,12 @@ const mapItemToForm = (item) => {
         await axios.post(`${API_URL}${endpointBase}`, cleanPayloadForCreate(formData));
         alert('Created successfully!');
       } else {
-        // PUT
+        // PUT - THIS WAS THE BUG: was using axios.post instead of axios.put
         const id = currentItem?.id;
         if (!id) {
           alert('Missing item id for update');
         } else {
-          await axios.post(`${API_URL}${endpointBase}`, cleanPayloadForCreate(formData));
+          await axios.put(`${API_URL}${endpointBase}/${id}`, cleanPayloadForCreate(formData));
           alert('Updated successfully!');
         }
       }
@@ -481,8 +481,8 @@ const mapItemToForm = (item) => {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">Admin Management</h1>
-          <p className="text-gray-600">Manage system data</p>
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">Exam Management</h1>
+          <p className="text-gray-600">Manage Exam data</p>
         </div>
 
         {/* Tabs */}
@@ -628,27 +628,24 @@ function ExamTypesTable({ data = [], onEdit, onDelete }) {
         ) : (
           data.map((item) => (
             <tr key={item.id} className="border-b hover:bg-gray-50">
-              <td className="px-6 py-4 font-semibold">{item.type_name}</td>
-              <td className="px-6 py-4 text-sm">
-  {formatTime(item.start_time)} – {formatTime(item.end_time)}
-</td>
-
-              <td className="px-6 py-4 text-center">
-                <span className={`px-2 py-1 rounded text-xs font-semibold ${item.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  {item.is_active ? 'Active' : 'Inactive'}
-                </span>
-              </td>
-              <td className="px-6 py-4 text-center">
-                <div className="flex items-center justify-center gap-2">
-                  <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-800" title="Edit">
-                    <Edit2 className="w-5 h-5" />
-                  </button>
-                  <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-800" title="Delete">
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </td>
-            </tr>
+  <td className="px-6 py-4 font-semibold">{item.type_name}</td>
+  <td className="px-6 py-4 text-sm">{item.description || 'No description'}</td>
+  <td className="px-6 py-4 text-center">
+    <span className={`px-2 py-1 rounded text-xs font-semibold ${item.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+      {item.is_active ? 'Active' : 'Inactive'}
+    </span>
+  </td>
+  <td className="px-6 py-4 text-center">
+    <div className="flex items-center justify-center gap-2">
+      <button onClick={() => onEdit(item)} className="text-blue-600 hover:text-blue-800" title="Edit">
+        <Edit2 className="w-5 h-5" />
+      </button>
+      <button onClick={() => onDelete(item.id)} className="text-red-600 hover:text-red-800" title="Delete">
+        <Trash2 className="w-5 h-5" />
+      </button>
+    </div>
+  </td>
+</tr>
           ))
         )}
       </tbody>

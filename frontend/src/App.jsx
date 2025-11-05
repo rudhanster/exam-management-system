@@ -1,7 +1,7 @@
 // App.jsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { ChevronLeft, ChevronRight, Calendar, Clock, BookOpen, LogOut, RefreshCw, Settings, LayoutDashboard, Filter, FileText, AlertTriangle, Award, Star, X, AlertCircle , User} from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Clock, BookOpen, LogOut, RefreshCw, Settings, LayoutDashboard, Filter, FileText, AlertTriangle, Award, Star, X, AlertCircle, User, Shield, Users } from 'lucide-react';
 import AdminPanel from './AdminPanel.jsx';
 import AdminManagement from './AdminManagement.jsx';
 import Reports from './Reports.jsx';
@@ -12,31 +12,25 @@ import AutoAssignmentV2 from './AutoAssignment-v2';
 import Feedback from './Feedback.jsx';
 import Credits from './Credits.jsx';
 import AdminFeedbackViewer from './AdminFeedbackViewer.jsx';
-
+import AdminUserManagement from './AdminUserManagement.jsx';
 import config from './config';
+
+
 const API_URL = config.apiUrl;
 
+// 🔍 DEBUG - Add this line
+console.log('🔍 API_URL configured as:', API_URL);
 
-const FACULTY_LIST = [
-  'admin@college.edu',
-  'smith@college.edu',
-  'johnson@college.edu',
-  'williams@college.edu',
-  'brown@college.edu',
-  'davis@college.edu',
-];
+// Configure axios to send credentials with every request
+axios.defaults.withCredentials = true;
 
 export default function App() {
+  // ============================================
+  // STATE DECLARATIONS
+  // ============================================
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
-    // ✅ Collapsible session blocks for faculty view
   const [openBlocks, setOpenBlocks] = useState({});
-  const toggleBlock = (timeRange) => {
-    setOpenBlocks((prev) => ({
-      ...prev,
-      [timeRange]: !prev[timeRange],
-    }));
-  };
-
   const [adminView, setAdminView] = useState('dashboard');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -58,6 +52,63 @@ export default function App() {
   const [releaseErrorDetails, setReleaseErrorDetails] = useState(null);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [canConfirm, setCanConfirm] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isFaculty, setIsFaculty] = useState(false);
+  const [viewMode, setViewMode] = useState('auto'); // 'auto', 'admin', 'faculty'
+
+  const toggleBlock = (timeRange) => {
+    setOpenBlocks((prev) => ({
+      ...prev,
+      [timeRange]: !prev[timeRange],
+    }));
+  };
+
+  // ============================================
+  // AUTHENTICATION CHECK
+  // ============================================
+useEffect(() => {
+  const checkAuth = async () => {
+    try {
+      const response = await axios.get(`${API_URL.replace('/api', '')}/auth/user`, {
+        withCredentials: true
+      });
+      
+      if (response.data.user) {
+        const user = response.data.user;
+        setCurrentUser(user.email);
+        setIsAuthenticated(true);
+        setIsAdmin(user.isAdmin);
+        setIsSuperAdmin(user.isSuperAdmin);
+        setIsFaculty(user.isFaculty);
+        
+        // Auto-select view mode
+        if (user.isAdmin && !user.isFaculty) {
+          setViewMode('admin');
+          setAdminView('dashboard');
+        } else if (user.isAdmin && user.isFaculty) {
+          // Dual role - default to admin but allow switching
+          setViewMode('admin');
+          setAdminView('dashboard');
+        } else if (user.isFaculty) {
+          setViewMode('faculty');
+          fetchFacultyData(user.email);
+        }
+      }
+    } catch (err) {
+      console.log('Not authenticated');
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+    }
+  };
+  
+  checkAuth();
+}, []);
+
+  useEffect(() => {
+    setIsAuthenticated(!!currentUser);
+  }, [currentUser]);
+
 
   // ============================================
   // FUNCTIONS 
@@ -387,17 +438,16 @@ const fetchFacultyRequirement = async (email, examTypeId) => {
   }
 };
 
-  const handleLogin = (email) => {
-    setCurrentUser(email);
-    if (email === 'admin@college.edu') {
-      setAdminView('dashboard');
-    } else {
-      fetchFacultyData(email);
-    }
-  };
 
-  const handleLogout = () => {
+const handleLogout = async () => {
+  try {
+    await axios.post(`${API_URL.replace('/api', '')}/auth/logout`, {}, { withCredentials: true });
     setCurrentUser(null);
+    setIsAuthenticated(false);
+    setIsAdmin(false);
+    setIsSuperAdmin(false);
+    setIsFaculty(false);
+    setViewMode('auto');
     setAdminView('dashboard');
     setPickedDuties([]);
     setSessions([]);
@@ -407,7 +457,15 @@ const fetchFacultyRequirement = async (email, examTypeId) => {
     setTimeRestrictions([]);
     setFacultyData(null);
     setMonthSessions([]);
-  };
+    
+    window.location.href = '/';
+  } catch (err) {
+    console.error('Logout error:', err);
+    window.location.href = '/';
+  }
+};
+
+
 
   const handleDateClick = (day) => {
     const dateStr = `2025-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -733,14 +791,18 @@ const handleConfirmPicks = async () => {
   }
 };
 
+
+
 // Update useEffect to fetch confirmation status
 useEffect(() => {
-  if (currentUser && currentUser !== 'admin@college.edu' && selectedExamType) {
+  if (currentUser && currentUser !== 'rudhanster@gmail.com' && selectedExamType) {
     fetchPickedDuties(currentUser);
     fetchFacultyRequirement(currentUser, selectedExamType.id);
     fetchConfirmationStatus(currentUser, selectedExamType.id);
   }
 }, [currentUser, selectedExamType]);
+
+
 
 // Update useEffect to check if can confirm
 useEffect(() => {
@@ -748,7 +810,7 @@ useEffect(() => {
     setCanConfirm(false);
     return;
   }
-  
+
   // Check 1: Is selection period still active?
   const now = new Date();
   const selectionDeadline = new Date(selectedExamType.selection_deadline);
@@ -796,20 +858,20 @@ useEffect(() => {
   // useEffect HOOKS (as provided)
   // ============================================
   useEffect(() => {
-    if (currentUser && currentUser !== 'admin@college.edu') {
-      fetchExamTypesAndSetDefault();
-      setCalendarToNextExam();
-    }
-  }, [currentUser]);
+  if (currentUser && viewMode === 'faculty') {
+    fetchExamTypesAndSetDefault();
+    setCalendarToNextExam();
+  }
+}, [currentUser, viewMode]);
 
-  useEffect(() => {
-    if (currentUser && currentUser !== 'admin@college.edu') {
-      fetchPickedDuties(currentUser);
-      if (selectedExamType) {
-        fetchFacultyRequirement(currentUser, selectedExamType.id);
-      }
+useEffect(() => {
+  if (currentUser && viewMode === 'faculty') {
+    fetchPickedDuties(currentUser);
+    if (selectedExamType) {
+      fetchFacultyRequirement(currentUser, selectedExamType.id);
     }
-  }, [currentUser, selectedExamType]);
+  }
+}, [currentUser, selectedExamType, viewMode]);
 
   useEffect(() => {
     if (facultyData && selectedExamType) {
@@ -817,11 +879,11 @@ useEffect(() => {
     }
   }, [facultyData, selectedExamType]);
 
-  useEffect(() => {
-    if (selectedExamType && facultyData) {
-      fetchMonthSessions();
-    }
-  }, [currentDate, selectedExamType, facultyData]);
+useEffect(() => {
+  if (selectedExamType && facultyData && viewMode === 'faculty') {
+    fetchMonthSessions();
+  }
+}, [currentDate, selectedExamType, facultyData, viewMode]);
 
   useEffect(() => {
     if (facultyData && selectedExamType && examTypes.length > 0) {
@@ -829,14 +891,14 @@ useEffect(() => {
     }
   }, [facultyData, selectedExamType, examTypes]);
 
-  useEffect(() => {
-    if (currentUser && currentUser !== 'admin@college.edu') {
-      fetchCalendarSummary();
-    }
-  }, [currentDate, selectedExamType]);
+useEffect(() => {
+  if (currentUser && viewMode === 'faculty') {
+    fetchCalendarSummary();
+  }
+}, [currentDate, selectedExamType, viewMode]);
 
   useEffect(() => {
-    if (!currentUser || currentUser === 'admin@college.edu') return;
+  if (!currentUser || viewMode !== 'faculty') return;
 
     let calendarInterval;
     let sessionInterval;
@@ -869,112 +931,275 @@ useEffect(() => {
     };
   }, [currentUser, selectedDate, selectedExamType]);
 
+
+// ============================================
+// VIEW MODE SWITCHER FOR DUAL-ROLE USERS
+// ============================================
+const ViewModeSwitcher = () => {
+  if (!isAdmin || !isFaculty) return null;
+  
+  const toggleView = () => {
+    if (viewMode === 'admin') {
+      setViewMode('faculty');
+      fetchFacultyData(currentUser);
+      fetchExamTypesAndSetDefault();
+      setCalendarToNextExam();
+    } else {
+      setViewMode('admin');
+      setAdminView('dashboard');
+    }
+  };
+  
+  return (
+    <button
+      onClick={toggleView}
+      className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap"
+    >
+      {viewMode === 'admin' ? (
+        <>
+          <User className="w-4 h-4" />
+          Switch to Faculty
+        </>
+      ) : (
+        <>
+          <Shield className="w-4 h-4" />
+          Switch to Admin
+        </>
+      )}
+    </button>
+  );
+};
   // ============================================
   // RENDER (same as your provided UI) with responsive Tailwind fixes
   // ============================================
 
-  if (!currentUser) {
+if (!isAuthenticated) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full">
+        <div className="text-center mb-8">
+          <Calendar className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-gray-800">DutyDesk</h1>
+          <p className="text-gray-600 mt-2">Exam Management System</p>
+        </div>
+        
+        <button
+          onClick={() => window.location.href = `${API_URL.replace('/api', '')}/auth/login`}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 23 23" fill="currentColor">
+            <path d="M11.5 0L0 6.5V17l11.5 6 11.5-6V6.5L11.5 0z"/>
+          </svg>
+          Sign in with Microsoft 365
+        </button>
+        
+        <p className="text-xs text-gray-500 text-center mt-6">
+          Use your college email to sign in
+        </p>
+      </div>
+    </div>
+  );
+}
+
+  {/*// Optional: Domain check
+  if (!userEmail?.endsWith('@manipal.edu')) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-2xl p-8 max-w-md w-full">
-          <div className="text-center mb-8">
-            <Calendar className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-gray-800">Exam Duty</h1>
-            <p className="text-gray-600 mt-2">Allocation System</p>
-          </div>
-          <div className="space-y-4">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Select Faculty
-            </label>
-            {FACULTY_LIST.map((email) => (
-              <button
-                key={email}
-                onClick={() => handleLogin(email)}
-                className="w-full text-left px-4 py-3 bg-gray-50 hover:bg-indigo-50 border border-gray-200 rounded-lg transition"
-              >
-                {email}
-              </button>
-            ))}
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="bg-white p-8 rounded-lg shadow-lg text-center max-w-md">
+          <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h2>
+          <p className="text-gray-700 mb-6">
+            Please use your college email address (@college.edu)
+          </p>
+          <p className="text-sm text-gray-600 mb-4">
+            Current: <strong>{userEmail}</strong>
+          </p>
+          <button
+            onClick={() => instance.logoutPopup()}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg"
+          >
+            Sign in with Different Account
+          </button>
         </div>
       </div>
     );
   }
-
+*/}
   const filteredSessions = selectedExamType
     ? sessions.filter(s => s.exam_type_id === selectedExamType.id)
     : sessions;
 
-  if (currentUser === 'admin@college.edu') {
+if (isAdmin && viewMode === 'admin') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        {/* Responsive Admin Header */}
         <header className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
-                <Calendar className="w-6 h-6 sm:w-8 sm:h-8" />
-                <h1 className="text-lg sm:text-2xl font-bold whitespace-nowrap">DutyDesk - Admin</h1>
+          <div className="w-full px-4 py-4">
+            <div className="flex items-center justify-between gap-3">
+              {/* Logo - Left side */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Calendar className="w-6 h-6" />
+                <h1 className="text-base lg:text-xl font-bold flex items-center gap-2 whitespace-nowrap">
+                  DutyDesk - Admin
+                  {isSuperAdmin && <Shield className="w-4 h-4 lg:w-5 lg:h-5 text-yellow-300" />}
+                </h1>
               </div>
 
-              <div className="flex flex-wrap justify-center sm:justify-end gap-2 w-full sm:w-auto">
-                {[
-                  { label: 'Board', icon: <LayoutDashboard className="w-4 h-4" />, view: 'dashboard' },
-                  { label: 'Exams', icon: <Settings className="w-4 h-4" />, view: 'management' },
-                  { label: 'Requisite', icon: <Award className="w-4 h-4" />, view: 'requirements' },
-                  { label: 'Duties', icon: <User className="w-4 h-4" />, view: 'assignments' },
-                  { label: 'Auto-Assign', icon: <RefreshCw className="w-4 h-4" />, view: 'auto-assign' },
-                  { label: 'Reports', icon: <FileText className="w-4 h-4" />, view: 'reports' },
-                ].map((item) => (
+              {/* Navigation - Right side, scrollable */}
+              <div className="overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                <style>{`.overflow-x-auto::-webkit-scrollbar { display: none; }`}</style>
+                <div className="flex items-center gap-2 min-w-max">
+                  {/* View Switcher */}
+                  <ViewModeSwitcher />
+                  
+                  {/* Board */}
                   <button
-                    key={item.label}
-                    onClick={() => setAdminView(item.view)}
-                    className={`flex items-center gap-1 px-3 py-2 rounded-md text-xs sm:text-sm font-semibold transition-all 
-                      ${adminView === item.view
-                        ? 'bg-white text-indigo-600'
-                        : 'bg-indigo-700 hover:bg-indigo-800'}`}
+                    onClick={() => setAdminView('dashboard')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap ${
+                      adminView === 'dashboard' ? 'bg-white text-indigo-600' : 'bg-white/10 hover:bg-white/20'
+                    }`}
                   >
-                    {item.icon}
-                    {item.label}
+                    <LayoutDashboard className="w-4 h-4" />
+                    Board
                   </button>
-                ))}
 
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-1 bg-red-500 hover:bg-red-600 px-3 py-2 rounded-md text-xs sm:text-sm font-semibold"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Logout
-                </button>
+                  {/* Exams */}
+                  <button
+                    onClick={() => setAdminView('management')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap ${
+                      adminView === 'management' ? 'bg-white text-indigo-600' : 'bg-white/10 hover:bg-white/20'
+                    }`}
+                  >
+                    <Settings className="w-4 h-4" />
+                    Exams
+                  </button>
+
+                  {/* Requisite */}
+                  <button
+                    onClick={() => setAdminView('requirements')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap ${
+                      adminView === 'requirements' ? 'bg-white text-indigo-600' : 'bg-white/10 hover:bg-white/20'
+                    }`}
+                  >
+                    <Award className="w-4 h-4" />
+                    Requisite
+                  </button>
+
+                  {/* Duties */}
+                  <button
+                    onClick={() => setAdminView('assignments')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap ${
+                      adminView === 'assignments' ? 'bg-white text-indigo-600' : 'bg-white/10 hover:bg-white/20'
+                    }`}
+                  >
+                    <User className="w-4 h-4" />
+                    Duties
+                  </button>
+
+                  {/* Auto-Assign */}
+                  <button
+                    onClick={() => setAdminView('auto-assign')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap ${
+                      adminView === 'auto-assign' ? 'bg-white text-indigo-600' : 'bg-white/10 hover:bg-white/20'
+                    }`}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Auto-Assign
+                  </button>
+
+                  {/* Reports */}
+                  <button
+                    onClick={() => setAdminView('reports')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap ${
+                      adminView === 'reports' ? 'bg-white text-indigo-600' : 'bg-white/10 hover:bg-white/20'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4" />
+                    Reports
+                  </button>
+
+                  {/* Admins */}
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => setAdminView('admin-users')}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap ${
+                        adminView === 'admin-users' ? 'bg-white text-indigo-600' : 'bg-white/10 hover:bg-white/20'
+                      }`}
+                    >
+                      <Users className="w-4 h-4" />
+                      Admins
+                    </button>
+                  )}
+
+                  {/* About Us */}
+                  <Credits />
+
+                  {/* Logout */}
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg font-semibold transition whitespace-nowrap"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </header>
 
         <main>
-        {adminView === 'dashboard' ? (
-  <AdminPanel />
-) : adminView === 'management' ? (
-  <AdminManagement />
-) : adminView === 'requirements' ? (
-  <DutyRequirements />
-) : adminView === 'assignments' ? (
-  <AdminAssignments />
-) : adminView === 'auto-assign' ? (                    
-  <AutoAssignmentV2                                    
-    examTypeId={selectedExamType?.id}                  
-    onComplete={() => {                                
-      setLastUpdate(new Date());                       
-      fetchMonthSessions();                            
-    }}                                                 
-  />                                                 
-) : (                                                  
-  <Reports />
-)}
+          {adminView === 'dashboard' ? (
+            <AdminPanel />
+          ) : adminView === 'management' ? (
+            <AdminManagement />
+          ) : adminView === 'requirements' ? (
+            <DutyRequirements />
+          ) : adminView === 'assignments' ? (
+            <AdminAssignments />
+          ) : adminView === 'auto-assign' ? (
+            <AutoAssignmentV2
+              examTypeId={selectedExamType?.id}
+              onComplete={() => {
+                setLastUpdate(new Date());
+                fetchMonthSessions();
+              }}
+            />
+          ) : adminView === 'admin-users' ? (
+            <AdminUserManagement />
+          ) : (
+            <Reports />
+          )}
         </main>
       </div>
     );
   }
+// If user is not admin and not faculty, show error
+if (!isAdmin && !isFaculty) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="bg-white p-8 rounded-lg shadow-lg text-center max-w-md">
+        <AlertCircle className="w-16 h-16 text-orange-600 mx-auto mb-4" />
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">Access Denied</h2>
+        <p className="text-gray-700 mb-4">
+          You are not registered as faculty or admin in the system.
+        </p>
+        <p className="text-sm text-gray-600 mb-4">
+          Current: <strong>{currentUser}</strong>
+        </p>
+        <button
+          onClick={handleLogout}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg"
+        >
+          Logout
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Faculty View
+
+
 
   const monthName = currentDate.toLocaleDateString('en-US', {
     month: 'long',
@@ -1016,24 +1241,27 @@ useEffect(() => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 justify-center sm:justify-end w-full sm:w-auto">
-            <div className="hidden sm:block text-sm">
-              <p className="text-indigo-100">Logged in as</p>
-              <div className="flex items-center gap-2">
-                <p className="font-semibold">{currentUser}</p>
-              </div>
-            </div>
+  {/* ADD THIS LINE - View Mode Switcher for dual-role users */}
+  <ViewModeSwitcher />
+  
+  <div className="hidden sm:block text-sm">
+    <p className="text-indigo-100">Logged in as</p>
+    <div className="flex items-center gap-2">
+      <p className="font-semibold">{currentUser}</p>
+    </div>
+  </div>
 
-            <Feedback currentUser={currentUser} />
-            <Credits />
+  <Feedback currentUser={currentUser} />
+  <Credits />
 
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 bg-red-500 hover:bg-red-600 px-3 py-2 rounded-md transition text-xs sm:text-sm"
-            >
-              <LogOut className="w-4 h-4" />
-              Logout
-            </button>
-          </div>
+  <button
+    onClick={handleLogout}
+    className="flex items-center gap-2 bg-red-500 hover:bg-red-600 px-3 py-2 rounded-md transition text-xs sm:text-sm"
+  >
+    <LogOut className="w-4 h-4" />
+    Logout
+  </button>
+</div>
         </div>
       </header>
 

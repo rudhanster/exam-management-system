@@ -47,7 +47,7 @@ export default function Credits() {
         title="View credits"
       >
         <Award size={18} />
-        <span className="hidden sm:inline">Credits</span>
+        <span className="hidden sm:inline">About Us</span>
       </button>
 
       {/* Credits Modal */}

@@ -2467,94 +2467,89 @@ router.post('/admin/auto-assign-v2', async (req, res) => {
       console.log(`   ${cadre}: ${faculties.length} total, ${eligible} eligible`);
     });
     
-// ========================================================================
-// STEP 5: Calculate target duties per faculty within each cadre
-// ========================================================================
-const facultyTargets = {};
+    // ========================================================================
+    // STEP 5: Calculate target duties per faculty within each cadre
+    // ========================================================================
+    const facultyTargets = {};
 
-Object.entries(facultyByCadre).forEach(([cadre, faculties]) => {
-  const cadreTarget = cadreAllocation[cadre]?.target_duties || 0;
+    Object.entries(facultyByCadre).forEach(([cadre, faculties]) => {
+      const cadreTarget = cadreAllocation[cadre]?.target_duties || 0;
 
-  // ✅ Include exempted faculty — we’ll cap them by their max later
-  const eligibleFaculty = faculties.filter(f => 
-    f.current_duties < f.effective_max_duties
-  );
-  const eligibleCount = eligibleFaculty.length;
+      // ✅ Count ALL non-confirmed faculty (including exempted with custom limits)
+      const eligibleFaculty = faculties.filter(f => 
+        !f.is_confirmed && 
+        f.current_duties < f.effective_max_duties
+      );
+      const eligibleCount = eligibleFaculty.length;
 
-  // 🧩 Safety guard: prevent divide-by-zero errors
-  if (eligibleCount === 0) {
-    console.log(`   ⚠️ No eligible faculty in ${cadre} - duties may go unassigned`);
-
-    faculties.forEach(faculty => {
-      facultyTargets[faculty.id] = {
-        faculty_id: faculty.id,
-        name: faculty.name,
-        cadre: faculty.cadre,
-        current_duties: faculty.current_duties,
-        target_duties: faculty.current_duties,
-        min_duties: faculty.effective_min_duties,
-        max_duties: faculty.effective_max_duties,
-        deficit: Math.max(0, faculty.effective_min_duties - faculty.current_duties),
-        surplus: 0,
-        needs_more: faculty.current_duties < faculty.effective_min_duties,
-        is_confirmed: faculty.is_confirmed,
-        has_exemption: faculty.has_exemption
-      };
-    });
-    return;
-  }
-
-  // 🎯 Calculate proportional share within this cadre
-  const baseTarget = Math.floor(cadreTarget / eligibleCount);
-  const remainder = cadreTarget % eligibleCount;
-
-  let eligibleIndex = 0;
-
-  faculties.forEach(faculty => {
-    const isEligible = faculty.current_duties < faculty.effective_max_duties;
-    let target;
-
-    if (isEligible) {
-      let idealTarget = baseTarget + (eligibleIndex < remainder ? 1 : 0);
-      eligibleIndex++;
-
-      // ✅ Handle exemptions properly
-      if (faculty.has_exemption) {
-        // If cadre target < faculty max → use target; else cap at max
-        target = Math.min(idealTarget, faculty.effective_max_duties);
-        console.log(`   ⚙️ ${faculty.name} (exempted): capped at ${target}/${faculty.effective_max_duties}`);
-      } else {
-        target = idealTarget;
+      if (eligibleCount === 0) {
+        console.log(`   ⚠️ No eligible faculty in ${cadre} - duties may go unassigned`);
+        faculties.forEach(faculty => {
+          facultyTargets[faculty.id] = {
+            faculty_id: faculty.id,
+            name: faculty.name,
+            cadre: faculty.cadre,
+            current_duties: faculty.current_duties,
+            target_duties: faculty.current_duties,
+            min_duties: faculty.effective_min_duties,
+            max_duties: faculty.effective_max_duties,
+            deficit: Math.max(0, faculty.effective_min_duties - faculty.current_duties),
+            surplus: 0,
+            needs_more: faculty.current_duties < faculty.effective_min_duties,
+            is_confirmed: faculty.is_confirmed,
+            has_exemption: faculty.has_exemption
+          };
+        });
+        return;
       }
-    } else {
-      // Faculty already at or above max — keep as is
-      target = faculty.current_duties;
-    }
 
-    facultyTargets[faculty.id] = {
-      faculty_id: faculty.id,
-      name: faculty.name,
-      cadre: faculty.cadre,
-      current_duties: faculty.current_duties,
-      target_duties: target,
-      min_duties: faculty.effective_min_duties,
-      max_duties: faculty.effective_max_duties,
-      deficit: Math.max(0, faculty.effective_min_duties - faculty.current_duties),
-      surplus: Math.max(0, faculty.current_duties - target),
-      needs_more: faculty.current_duties < faculty.effective_min_duties,
-      is_confirmed: faculty.is_confirmed,
-      has_exemption: faculty.has_exemption
-    };
-  });
-});
+      // Calculate fair distribution among eligible faculty
+      const baseTarget = Math.floor(cadreTarget / eligibleCount);
+      const remainder = cadreTarget % eligibleCount;
 
-console.log('\n🎯 Faculty Targets:');
-Object.values(facultyTargets).forEach(ft => {
-  const status = ft.needs_more ? '⚠️ BELOW MIN' : '✓';
-  const exemptTag = ft.has_exemption ? ' (Exempted)' : '';
-  console.log(`   ${status} ${ft.name}${exemptTag} (${ft.cadre}): ${ft.current_duties} → ${ft.target_duties} (min: ${ft.min_duties}, max: ${ft.max_duties})`);
-});
+      let eligibleIndex = 0;
 
+      faculties.forEach(faculty => {
+        const isEligible = !faculty.is_confirmed && 
+                          faculty.current_duties < faculty.effective_max_duties;
+        let target;
+
+        if (isEligible) {
+          let idealTarget = baseTarget + (eligibleIndex < remainder ? 1 : 0);
+          eligibleIndex++;
+          
+          // ✅ Cap at faculty's max (whether exempted or not)
+          target = Math.min(idealTarget, faculty.effective_max_duties);
+        } else {
+          // Confirmed faculty or already at max keep current duties
+          target = faculty.current_duties;
+        }
+
+        facultyTargets[faculty.id] = {
+          faculty_id: faculty.id,
+          name: faculty.name,
+          cadre: faculty.cadre,
+          current_duties: faculty.current_duties,
+          target_duties: target,
+          min_duties: faculty.effective_min_duties,
+          max_duties: faculty.effective_max_duties,
+          deficit: Math.max(0, faculty.effective_min_duties - faculty.current_duties),
+          surplus: Math.max(0, faculty.current_duties - target),
+          needs_more: faculty.current_duties < faculty.effective_min_duties,
+          is_confirmed: faculty.is_confirmed,
+          has_exemption: faculty.has_exemption
+        };
+      });
+    });
+
+    console.log('\n🎯 Faculty Targets:');
+    Object.values(facultyTargets).forEach(ft => {
+      const status = ft.needs_more ? '⚠️ BELOW MIN' : '✓';
+      const exemptTag = ft.has_exemption ? ' (Custom limits)' : '';
+      const confirmedTag = ft.is_confirmed ? ' (Confirmed)' : '';
+      console.log(`   ${status} ${ft.name}${exemptTag}${confirmedTag} (${ft.cadre}): ${ft.current_duties} → ${ft.target_duties} (min: ${ft.min_duties}, max: ${ft.max_duties})`);
+    });
+    
     // ========================================================================
     // STEP 6: Get all slots (free and assigned) for reallocation
     // ========================================================================
@@ -2592,31 +2587,37 @@ Object.values(facultyTargets).forEach(ft => {
     console.log(`   Assigned slots: ${assignedSlots.length}`);
     
     // ========================================================================
-    // STEP 7: Perform reallocation if enabled
+    // STEP 7: PHASE 3 - Smart Reallocation (Balance loads)
     // ========================================================================
     const executedReallocations = [];
     
     if (enable_reallocation && assignedSlots.length > 0) {
-      console.log('\n🔄 Starting reallocation phase...');
+      console.log('\n🔄 PHASE 3: Smart Reallocation...');
       
-      // Identify faculty who need more duties (below minimum)
-      const underMinimumFaculty = Object.values(facultyTargets)
-        .filter(ft => ft.needs_more && !ft.is_confirmed)
-        .sort((a, b) => b.deficit - a.deficit);
+      // Identify faculty who need more duties (below minimum first, then below target)
+      const needMoreFaculty = Object.values(facultyTargets)
+        .filter(ft => !ft.is_confirmed && ft.current_duties < ft.target_duties)
+        .sort((a, b) => {
+          // Priority 1: Below minimum
+          if (a.needs_more && !b.needs_more) return -1;
+          if (!a.needs_more && b.needs_more) return 1;
+          // Priority 2: Largest deficit
+          return b.deficit - a.deficit;
+        });
       
-      // Identify faculty with surplus duties
+      // Identify faculty with surplus duties (above target)
       const overAllocatedFaculty = Object.values(facultyTargets)
-        .filter(ft => ft.surplus > 0 && !ft.is_confirmed)
+        .filter(ft => !ft.is_confirmed && ft.current_duties > ft.target_duties)
         .sort((a, b) => b.surplus - a.surplus);
       
-      console.log(`   Faculty below minimum: ${underMinimumFaculty.length}`);
+      console.log(`   Faculty needing more: ${needMoreFaculty.length}`);
       console.log(`   Faculty over-allocated: ${overAllocatedFaculty.length}`);
       
-      for (const underFaculty of underMinimumFaculty) {
-        if (underFaculty.current_duties >= underFaculty.min_duties) break;
+      for (const underFaculty of needMoreFaculty) {
+        if (underFaculty.current_duties >= underFaculty.target_duties) break;
         
         for (const overFaculty of overAllocatedFaculty) {
-          if (underFaculty.current_duties >= underFaculty.min_duties) break;
+          if (underFaculty.current_duties >= underFaculty.target_duties) break;
           if (overFaculty.current_duties <= overFaculty.target_duties) continue;
           
           const slotsToReallocate = assignedSlots.filter(s => 
@@ -2625,7 +2626,7 @@ Object.values(facultyTargets).forEach(ft => {
           );
           
           for (const slot of slotsToReallocate) {
-            if (underFaculty.current_duties >= underFaculty.min_duties) break;
+            if (underFaculty.current_duties >= underFaculty.target_duties) break;
             
             const hasConflict = await hasSchedulingConflict(
               client,
@@ -2657,9 +2658,12 @@ Object.values(facultyTargets).forEach(ft => {
             });
             
             overFaculty.current_duties--;
+            overFaculty.surplus--;
             underFaculty.current_duties++;
+            underFaculty.deficit = Math.max(0, underFaculty.min_duties - underFaculty.current_duties);
+            underFaculty.needs_more = underFaculty.current_duties < underFaculty.min_duties;
             
-            console.log(`   ✅ ${overFaculty.name} → ${underFaculty.name}: ${slot.course_code}`);
+            console.log(`   ✅ ${overFaculty.name} (${overFaculty.current_duties+1}→${overFaculty.current_duties}) → ${underFaculty.name} (${underFaculty.current_duties-1}→${underFaculty.current_duties}): ${slot.course_code}`);
             break;
           }
         }
@@ -2669,79 +2673,58 @@ Object.values(facultyTargets).forEach(ft => {
     }
     
     // ========================================================================
-    // STEP 8: DECLARE ARRAYS FOR NEW ASSIGNMENTS - CRITICAL!
+    // STEP 8: DECLARE ARRAYS FOR NEW ASSIGNMENTS
     // ========================================================================
-    const newAssignments = [];  // ← CRITICAL: Declare here!
+    const newAssignments = [];
     const failures = [];
     
     // ========================================================================
-    // STEP 9: Assign remaining free slots
+    // STEP 9: PHASE 1 & 2 - Assign free slots (Minimums first, then proportional)
     // ========================================================================
-    console.log(`\n📋 Processing ${freeSlots.length} free slots...`);
+    console.log(`\n📋 PHASE 1 & 2: Processing ${freeSlots.length} free slots...`);
     
     for (const slot of freeSlots) {
       let assigned = false;
       
-      // Calculate current cadre allocations
-      const currentCadreAllocations = {};
-      Object.keys(cadreAllocation).forEach(cadre => {
-        currentCadreAllocations[cadre] = Object.values(facultyTargets)
-          .filter(ft => ft.cadre === cadre)
-          .reduce((sum, ft) => sum + ft.current_duties, 0);
-      });
-      
-      // Find eligible faculty
+      // Get faculty sorted by priority
       const eligibleForSlot = Object.values(facultyTargets)
-  .filter(ft => {
-    // 🚫 Skip confirmed faculty only
-    if (ft.is_confirmed) return false;
-
-    // ✅ Allow exemption-limited faculty if they’re still under their max
-    if (ft.current_duties >= ft.max_duties) return false;
-
-    return true;
-  })
-  .sort((a, b) => {
-    // Priority 1: Faculty below minimum
-    if (a.needs_more && !b.needs_more) return -1;
-    if (!a.needs_more && b.needs_more) return 1;
-
-    // Priority 2: Maintain cadre ratios
-    const aCadreAlloc = cadreAllocation[a.cadre];
-    const bCadreAlloc = cadreAllocation[b.cadre];
-    if (aCadreAlloc && bCadreAlloc) {
-      const aCadreDeficit = aCadreAlloc.target_duties -
-        Object.values(facultyTargets)
-          .filter(ft2 => ft2.cadre === a.cadre)
-          .reduce((sum, ft2) => sum + ft2.current_duties, 0);
-      const bCadreDeficit = bCadreAlloc.target_duties -
-        Object.values(facultyTargets)
-          .filter(ft2 => ft2.cadre === b.cadre)
-          .reduce((sum, ft2) => sum + ft2.current_duties, 0);
-      if (Math.abs(aCadreDeficit - bCadreDeficit) > 0.5) {
-        return bCadreDeficit - aCadreDeficit;
-      }
-    }
-
-    // Priority 3: Further from individual target
-    const aDeficit = a.target_duties - a.current_duties;
-    const bDeficit = b.target_duties - b.current_duties;
-    if (aDeficit !== bDeficit) return bDeficit - aDeficit;
-
-    // Priority 4: Fewer current duties
-    return a.current_duties - b.current_duties;
-  });
-
+        .filter(ft => {
+          // Skip confirmed faculty
+          if (ft.is_confirmed) return false;
+          // ✅ Allow exempted faculty but respect their max
+          if (ft.current_duties >= ft.max_duties) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          // 🎯 PRIORITY 1: Faculty below minimum (HIGHEST PRIORITY)
+          if (a.needs_more && !b.needs_more) return -1;
+          if (!a.needs_more && b.needs_more) return 1;
+          
+          // 🎯 PRIORITY 2: Maintain cadre proportions (by progress %)
+          const aProgress = a.current_duties / a.target_duties;
+          const bProgress = b.current_duties / b.target_duties;
+          if (Math.abs(aProgress - bProgress) > 0.01) {
+            return aProgress - bProgress; // Lower progress% = higher priority
+          }
+          
+          // 🎯 PRIORITY 3: Absolute deficit from target
+          const aDeficit = a.target_duties - a.current_duties;
+          const bDeficit = b.target_duties - b.current_duties;
+          if (aDeficit !== bDeficit) return bDeficit - aDeficit;
+          
+          // 🎯 PRIORITY 4: Fewest current duties
+          return a.current_duties - b.current_duties;
+        });
       
       for (const faculty of eligibleForSlot) {
-        // FIX #3: Check for conflicts with BOTH DB and memory
+        // Check for scheduling conflicts
         const hasConflict = await hasSchedulingConflict(
-          client,              // ← Must include client!
+          client,
           faculty.faculty_id,
           slot.session_date,
           slot.start_time,
           slot.end_time,
-          newAssignments      // ← Must pass newAssignments!
+          newAssignments
         );
         
         if (hasConflict) continue;
@@ -2761,11 +2744,13 @@ Object.values(facultyTargets).forEach(ft => {
         });
         
         faculty.current_duties++;
-        currentCadreAllocations[faculty.cadre]++;
+        faculty.deficit = Math.max(0, faculty.min_duties - faculty.current_duties);
+        faculty.needs_more = faculty.current_duties < faculty.min_duties;
         assigned = true;
         
-        const status = faculty.needs_more ? '⚠️→✓' : '✓';
-        console.log(`   ${status} ${faculty.name} (${faculty.cadre.substring(0,4)}) → ${slot.course_code} ${slot.room_code} [${faculty.current_duties-1}→${faculty.current_duties}]`);
+        const progress = ((faculty.current_duties / faculty.target_duties) * 100).toFixed(0);
+        const status = faculty.needs_more ? '⚠️' : '✓';
+        console.log(`   ${status} ${faculty.name} (${faculty.cadre.substring(0,4)}) [${progress}%] → ${slot.course_code} [${faculty.current_duties-1}→${faculty.current_duties}]`);
         break;
       }
       
@@ -2776,103 +2761,14 @@ Object.values(facultyTargets).forEach(ft => {
           session_date: slot.session_date,
           start_time: slot.start_time,
           room_code: slot.room_code,
-          reason: 'No eligible faculty available'
+          reason: 'No eligible faculty available (all at max or have conflicts)'
         });
         console.log(`   ❌ Failed: ${slot.course_code} ${slot.room_code}`);
       }
     }
     
-    console.log(`\n✅ Assigned ${newAssignments.length} slots, ${failures.length} failed`);
-
-    // ========================================================================
-// STEP 9B: Redistribute remaining unassigned slots proportionally
-// ========================================================================
-const leftoverSlots = failures.filter(f => f.reason === 'No eligible faculty available');
-
-if (leftoverSlots.length > 0) {
-  console.log(`\n♻️ Starting redistribution for ${leftoverSlots.length} leftover slots...`);
-
-  // Recompute current cadre totals
-  const currentCadreTotals = {};
-  Object.keys(cadreAllocation).forEach(cadre => {
-    currentCadreTotals[cadre] = Object.values(facultyTargets)
-      .filter(ft => ft.cadre === cadre)
-      .reduce((sum, ft) => sum + ft.current_duties, 0);
-  });
-
-  // Find cadres with remaining capacity
-  const cadresNeedingMore = Object.entries(cadreAllocation)
-    .filter(([cadre, alloc]) => currentCadreTotals[cadre] < alloc.target_duties)
-    .map(([cadre, alloc]) => ({
-      cadre,
-      remaining: alloc.target_duties - currentCadreTotals[cadre],
-    }))
-    .sort((a, b) => b.remaining - a.remaining);
-
-  console.log('   Remaining capacity by cadre:');
-  cadresNeedingMore.forEach(c => console.log(`   - ${c.cadre}: ${c.remaining}`));
-
-  // Try reassigning leftover slots
-  const stillFailed = [];
-  for (const slot of leftoverSlots) {
-    let assigned = false;
-
-    for (const { cadre } of cadresNeedingMore) {
-      const availableFaculty = Object.values(facultyTargets)
-        .filter(ft =>
-          ft.cadre === cadre &&
-          !ft.is_confirmed &&
-          !ft.has_exemption &&
-          ft.current_duties < ft.max_duties
-        )
-        .sort((a, b) => a.current_duties - b.current_duties);
-
-      for (const faculty of availableFaculty) {
-        const hasConflict = await hasSchedulingConflict(
-          client,
-          faculty.faculty_id,
-          slot.session_date,
-          slot.start_time,
-          slot.end_time,
-          newAssignments
-        );
-
-        if (hasConflict) continue;
-
-        newAssignments.push({
-          slot_id: slot.slot_id,
-          session_id: slot.session_id,
-          faculty_id: faculty.faculty_id,
-          faculty_name: faculty.name,
-          faculty_cadre: faculty.cadre,
-          course_code: slot.course_code,
-          session_date: slot.session_date,
-          start_time: slot.start_time,
-          end_time: slot.end_time,
-          room_code: slot.room_code
-        });
-
-        faculty.current_duties++;
-        currentCadreTotals[cadre]++;
-        assigned = true;
-        console.log(`   🔁 Redistributed ${slot.course_code} → ${faculty.name} (${cadre})`);
-        break;
-      }
-
-      if (assigned) break;
-    }
-
-    if (!assigned) {
-      stillFailed.push(slot);
-    }
-  }
-
-  console.log(`\n✅ Redistributed ${leftoverSlots.length - stillFailed.length} slots`);
-  console.log(`❌ ${stillFailed.length} still unassigned`);
-  failures.length = 0;
-  failures.push(...stillFailed);
-}
-
+    console.log(`\n✅ Assigned ${newAssignments.length}/${freeSlots.length} slots`);
+    console.log(`❌ ${failures.length} failed assignments`);
     
     // ========================================================================
     // STEP 10: Execute assignments (if not dry run)
@@ -2889,10 +2785,10 @@ if (leftoverSlots.length > 0) {
         );
         
         await client.query(
-  `INSERT INTO assignment_audit (slot_id, faculty_id, action, actor)
-   VALUES ($1, $2, 'auto_assigned', 'system')`,  // ← Use 'auto_assigned'
-  [realloc.slot_id, realloc.to_faculty_id]
-);
+          `INSERT INTO assignment_audit (slot_id, faculty_id, action, actor)
+           VALUES ($1, $2, 'auto_assigned', 'system')`,
+          [realloc.slot_id, realloc.to_faculty_id]
+        );
       }
       
       // Execute new assignments
@@ -2926,15 +2822,16 @@ if (leftoverSlots.length > 0) {
     const finalSummary = {};
     
     Object.values(facultyTargets).forEach(ft => {
+      const beforeCount = ft.current_duties - (newAssignments.filter(a => a.faculty_id === ft.faculty_id).length);
+      const assignedCount = newAssignments.filter(a => a.faculty_id === ft.faculty_id).length;
+      const reallocIn = executedReallocations.filter(r => r.to_faculty_id === ft.faculty_id).length;
+      const reallocOut = executedReallocations.filter(r => r.from_faculty_id === ft.faculty_id).length;
+      
       finalSummary[ft.name] = {
         cadre: ft.cadre,
-        before: ft.current_duties - (newAssignments.filter(a => a.faculty_id === ft.faculty_id).length),
-        assigned: newAssignments.filter(a => a.faculty_id === ft.faculty_id).length,
-        reallocated: executedReallocations.filter(r => 
-          r.to_faculty_id === ft.faculty_id
-        ).length - executedReallocations.filter(r => 
-          r.from_faculty_id === ft.faculty_id
-        ).length,
+        before: beforeCount,
+        assigned: assignedCount,
+        reallocated: reallocIn - reallocOut,
         after: ft.current_duties,
         target: ft.target_duties,
         min_required: ft.min_duties,
@@ -2957,7 +2854,8 @@ if (leftoverSlots.length > 0) {
       console.log(`\n   ${cadre}:`);
       faculties.forEach(f => {
         const status = f.meets_minimum ? '✓' : '⚠️';
-        console.log(`     ${status} ${f.name}: ${f.before} → ${f.after} (target: ${f.target})`);
+        const targetStatus = f.meets_target ? '🎯' : '';
+        console.log(`     ${status}${targetStatus} ${f.name}: ${f.before} → ${f.after} (target: ${f.target}, min: ${f.min_required})`);
       });
     });
     
@@ -3613,5 +3511,7 @@ router.delete('/feedback/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete feedback' });
   }
 });
+
+
 
 module.exports = { router, setPool };

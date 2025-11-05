@@ -1,14 +1,27 @@
 // server.js
-// server.js
+require('dotenv').config();
+
+// Then your other imports
 const express = require('express');
+const passport = require('./auth/azureAuth');
+
+const session = require('express-session');
 const app = express();
 const { Pool } = require('pg');
 const cors = require('cors');
+const dns = require('dns');
 const NodeCache = require('node-cache');
 const { router: adminRoutes, setPool: setAdminPool } = require('./adminRoutes');
 const { router: uploadRouter, setPool: setUploadPool } = require('./uploadRoutes');
 
-// Only load dotenv in local development
+// ==============================
+// 🌐 Force IPv4 DNS (CRITICAL)
+// ==============================
+dns.setDefaultResultOrder('ipv4first');
+
+// ==============================
+// 🌱 Load Environment Variables
+// ==============================
 if (!process.env.DATABASE_URL) {
   require('dotenv').config();
 }
@@ -16,44 +29,25 @@ if (!process.env.DATABASE_URL) {
 console.log('🔍 Environment Check:');
 console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
-console.log('DATABASE_URL preview:', process.env.DATABASE_URL?.substring(0, 50));
 
-// Helper to parse connection string and force IPv4
-const parseConnectionString = (url) => {
-  const match = url.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
-  if (match) {
-    return {
-      user: match[1],
-      password: match[2],
-      host: match[3],
-      port: parseInt(match[4]),
-      database: match[5]
+// ==============================
+// ⚙️ Database Pool
+// ==============================
+const isSupabase = process.env.DATABASE_URL?.includes('supabase.co') || 
+                   process.env.DATABASE_URL?.includes('pooler.supabase.com');
+
+const poolConfig = isSupabase
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    }
+  : {
+      connectionString: process.env.DATABASE_URL,
+      ssl: false
     };
-  }
-  return null;
-};
-
-// Create database pool with IPv4 forcing for Supabase
-let poolConfig;
-if (process.env.DATABASE_URL?.includes('supabase.co')) {
-  const parsed = parseConnectionString(process.env.DATABASE_URL);
-  poolConfig = {
-    ...parsed,
-    ssl: { rejectUnauthorized: false },
-    family: 4 // Force IPv4 to avoid ENETUNREACH error
-  };
-  console.log('🔧 Using parsed Supabase config with IPv4');
-} else {
-  poolConfig = {
-    connectionString: process.env.DATABASE_URL,
-    ssl: false
-  };
-  console.log('🔧 Using local database config');
-}
 
 const pool = new Pool(poolConfig);
 
-// Test connection on startup
 pool.connect((err, client, release) => {
   if (err) {
     console.error('❌ Database connection failed:', err.message);
@@ -64,84 +58,397 @@ pool.connect((err, client, release) => {
   }
 });
 
-// Pool error handling
 pool.on('error', (err) => {
   console.error('❌ Unexpected error on idle client', err);
 });
 
-// Set pool for routes
 setAdminPool(pool);
 setUploadPool(pool);
 
 const cache = new NodeCache({ stdTTL: 10 });
 
-// CORS configuration
+// ==============================
+// 🌍 CORS (BEFORE other middleware)
+// ==============================
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://exam-management-system-1-tksh.onrender.com',
   'https://exam-management-system-74ix.vercel.app',
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = `CORS policy does not allow access from origin ${origin}`;
-      return callback(new Error(msg), false);
+  origin: (origin, callback) => {
+    console.log('🔍 CORS Request from origin:', origin);
+    
+    // Allow requests with no origin OR null origin (Azure AD callback)
+    if (!origin || origin === 'null') {
+      console.log('✅ No origin or null origin - allowing');
+      return callback(null, true);
     }
-    return callback(null, true);
+    
+    // Allow all localhost with any port
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      console.log('✅ Localhost origin - allowing');
+      return callback(null, true);
+    }
+    
+    // Production whitelist
+    const allowedOrigins = [
+      'https://exam-management-system-74ix.vercel.app',
+    ];
+    
+    if (allowedOrigins.includes(origin)) {
+      console.log('✅ Whitelisted origin - allowing');
+      return callback(null, true);
+    }
+    
+    console.log('❌ Origin blocked:', origin);
+    callback(new Error('Not allowed by CORS'));
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+
+
+// ==============================
+// 📝 Body Parsers
+// ==============================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Attach pool and cache to requests
+// ==============================
+// 🔐 Session & Passport (BEFORE routes)
+// ==============================
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+  },
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+// ==============================
+// 🔗 Attach pool + cache to requests
+// ==============================
 app.use((req, res, next) => {
   req.pool = pool;
   req.cache = cache;
   next();
 });
 
-// Load upload routes
-try {
-  const { router: uploadRouter, setPool } = require('./uploadRoutes');
-  setPool(pool);
-  app.use('/api', uploadRouter);
-  console.log('✅ Upload routes loaded successfully');
-} catch (error) {
-  console.error('❌ Upload routes error:', error.message);
-}
+// ==============================
+// 🔓 PUBLIC Authentication Routes (NO protection)
+// ==============================
 
-// Load admin routes
-setAdminPool(pool);
-app.use('/api', adminRoutes);
+// ============================================
+// AUTH ROUTES
+// ============================================
 
+// Login route
+app.get('/auth/login',
+  passport.authenticate('azuread-openidconnect', {
+    failureRedirect: '/',
+    prompt: 'select_account'
+  })
+);
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    database: pool.totalCount > 0 ? 'connected' : 'disconnected',
-    timestamp: new Date().toISOString()
+// Callback route
+app.get('/auth/callback',
+  passport.authenticate('azuread-openidconnect', {
+    failureRedirect: '/'
+  }),
+  (req, res) => {
+    res.redirect('/');
+  }
+);
+
+// ✅ UPDATE THIS ROUTE - Get current user with admin status
+app.get('/auth/user', async (req, res) => {
+  if (req.isAuthenticated()) {
+    const email = req.user.email;
+    
+    try {
+      // Check if user is admin
+      const adminCheck = await pool.query(
+        'SELECT email, is_super_admin FROM admins WHERE email = $1',
+        [email]
+      );
+      
+      // Check if user is also faculty
+      const facultyCheck = await pool.query(
+        'SELECT email, name, cadre FROM faculty WHERE email = $1',
+        [email]
+      );
+      
+      res.json({
+        user: {
+          email: email,
+          isAdmin: adminCheck.rows.length > 0,
+          isSuperAdmin: adminCheck.rows.length > 0 ? adminCheck.rows[0].is_super_admin : false,
+          isFaculty: facultyCheck.rows.length > 0,
+          facultyData: facultyCheck.rows.length > 0 ? facultyCheck.rows[0] : null
+        }
+      });
+    } catch (err) {
+      console.error('Error checking user roles:', err);
+      res.status(500).json({ error: 'Failed to check user roles' });
+    }
+  } else {
+    res.status(401).json({ error: 'Not authenticated' });
+  }
+});
+
+// Logout route
+app.post('/auth/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      console.error('Logout error:', err);
+      return res.status(500).json({ error: 'Logout failed' });
+    }
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('Session destruction error:', err);
+      }
+      res.json({ success: true });
+    });
   });
 });
 
+app.get('/auth/login', passport.authenticate('azuread-openidconnect', { failureRedirect: '/' }));
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, closing server...');
-  await pool.end();
-  process.exit(0);
+app.post('/auth/callback',
+  (req, res, next) => {
+    passport.authenticate('azuread-openidconnect', (err, user, info) => {
+      if (err) {
+        console.error('❌ Passport authentication error:', err);
+        return res.status(500).json({ error: 'Authentication failed', details: err.message });
+      }
+      
+      if (!user) {
+        console.error('❌ No user returned from passport. Info:', info);
+        return res.redirect('/');
+      }
+      
+      req.logIn(user, (err) => {
+        if (err) {
+          console.error('❌ Session login error:', err);
+          return res.status(500).json({ error: 'Session creation failed', details: err.message });
+        }
+        
+        console.log('✅ User authenticated successfully:', user.email);
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        console.log('🔄 Redirecting to:', frontendUrl);
+        return res.redirect(frontendUrl);
+      });
+    })(req, res, next);
+  }
+);
+
+
+
+app.post('/auth/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) return res.status(500).json({ error: 'Logout failed' });
+    res.json({ message: 'Logged out successfully' });
+  });
+});
+// ============================================
+// ADMIN MANAGEMENT ROUTES
+// ============================================
+
+// Middleware to check if user is authenticated
+const requireAuth = (req, res, next) => {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ error: 'Not authenticated' });
+};
+
+// Middleware to check if user is admin
+const requireAdmin = async (req, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  try {
+    const adminCheck = await pool.query(
+      'SELECT email FROM admins WHERE email = $1',
+      [req.user.email]
+    );
+    
+    if (adminCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Not authorized - Admin access required' });
+    }
+    
+    next();
+  } catch (err) {
+    console.error('Error checking admin status:', err);
+    res.status(500).json({ error: 'Failed to verify admin status' });
+  }
+};
+
+// Middleware to check if user is super admin
+const requireSuperAdmin = async (req, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  
+  try {
+    const superAdminCheck = await pool.query(
+      'SELECT is_super_admin FROM admins WHERE email = $1',
+      [req.user.email]
+    );
+    
+    if (superAdminCheck.rows.length === 0 || !superAdminCheck.rows[0].is_super_admin) {
+      return res.status(403).json({ error: 'Not authorized - Super admin access required' });
+    }
+    
+    next();
+  } catch (err) {
+    console.error('Error checking super admin status:', err);
+    res.status(500).json({ error: 'Failed to verify super admin status' });
+  }
+};
+
+// Get all admins (admin only)
+app.get('/api/admins', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        a.email, 
+        a.is_super_admin, 
+        a.added_by, 
+        a.added_at,
+        f.name as faculty_name,
+        f.cadre as faculty_cadre,
+        CASE WHEN f.email IS NOT NULL THEN true ELSE false END as is_faculty
+      FROM admins a
+      LEFT JOIN faculty f ON a.email = f.email
+      ORDER BY a.is_super_admin DESC, a.added_at ASC
+    `);
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching admins:', err);
+    res.status(500).json({ error: 'Failed to fetch admins' });
+  }
 });
 
-process.on('SIGINT', async () => {
-  console.log('\nSIGINT received, closing server...');
-  await pool.end();
-  process.exit(0);
+// Add new admin (super admin only)
+app.post('/api/admins', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { email, isSuperAdmin } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    // Check if email already exists
+    const existingAdmin = await pool.query(
+      'SELECT email FROM admins WHERE email = $1',
+      [email]
+    );
+    
+    if (existingAdmin.rows.length > 0) {
+      return res.status(400).json({ error: 'Admin already exists' });
+    }
+    
+    // Add admin
+    await pool.query(
+      'INSERT INTO admins (email, is_super_admin, added_by) VALUES ($1, $2, $3)',
+      [email, isSuperAdmin || false, req.user.email]
+    );
+    
+    console.log(`✅ Admin added: ${email} by ${req.user.email}`);
+    res.json({ success: true, message: 'Admin added successfully' });
+  } catch (err) {
+    console.error('Error adding admin:', err);
+    res.status(500).json({ error: 'Failed to add admin' });
+  }
 });
+
+// Remove admin (super admin only)
+app.delete('/api/admins/:email', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    // Prevent removing yourself
+    if (email === req.user.email) {
+      return res.status(400).json({ error: 'Cannot remove yourself' });
+    }
+    
+    // Check if target is super admin
+    const targetCheck = await pool.query(
+      'SELECT is_super_admin FROM admins WHERE email = $1',
+      [email]
+    );
+    
+    if (targetCheck.rows.length > 0 && targetCheck.rows[0].is_super_admin) {
+      return res.status(400).json({ error: 'Cannot remove super admin' });
+    }
+    
+    // Remove admin
+    const result = await pool.query('DELETE FROM admins WHERE email = $1 RETURNING email', [email]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Admin not found' });
+    }
+    
+    console.log(`✅ Admin removed: ${email} by ${req.user.email}`);
+    res.json({ success: true, message: 'Admin removed successfully' });
+  } catch (err) {
+    console.error('Error removing admin:', err);
+    res.status(500).json({ error: 'Failed to remove admin' });
+  }
+});
+
+// ==============================
+// ❤️ Health Check (PUBLIC)
+// ==============================
+app.get('/health', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json({
+      status: 'ok',
+      database: 'connected',
+      timestamp: result.rows[0].now,
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      database: 'disconnected',
+      error: error.message,
+    });
+  }
+});
+
+// ==============================
+// 🔒 Protected Routes Middleware
+// ==============================
+const ensureAuthenticated = (req, res, next) => {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ error: 'Authentication required' });
+};
+
+// ==============================
+// 📦 Apply Authentication to API Routes
+// ==============================
+// OPTION 1: Protect ALL API routes
+// app.use('/api', ensureAuthenticated);
+
+// OPTION 2: For development, temporarily disable auth
+// Comment out the line above and your routes will be public
+
 
 // ===================================================================================
 // UTILITIES
@@ -2043,12 +2350,58 @@ app.put('/api/exam-info/:id', async (req, res) => {
   }
 });
 
+// 🔍 Test endpoint to verify routes are working
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    message: 'API routes are working',
+    timestamp: new Date().toISOString() 
+  });
+});
 
+console.log('\n✅ All routes registered. Testing with: http://localhost:4000/api/test\n');
 
-/* START SERVER */
-const PORT = process.env.PORT || 4000;
+ 
+
+// ==============================
+// 🚀 Start Server
+// ==============================
+// 🔍 Test endpoint to verify routes are working
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    message: 'API routes are working',
+    timestamp: new Date().toISOString() 
+  });
+});
+
+console.log('\n✅ All routes registered. Testing with: http://localhost:4000/api/test\n');
+app.use('/api', uploadRouter);
+app.use('/api', adminRoutes);
+
+console.log('✅ Upload routes loaded');
+console.log('✅ Admin routes loaded');
+
+// ==============================
+// 🚀 Start Server
+// ==============================
+ PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
-  console.log(`📊 Database: ${process.env.DB_NAME}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  console.log(`✅ Server running on http://localhost:4000`);
+  console.log(`🔗 Health check: http://localhost:4000/health`);
+});
+
+// ==============================
+// 🚦 Graceful Shutdown
+// ==============================
+process.on('SIGTERM', async () => {
+  console.log('🛑 SIGTERM received. Closing server...');
+  await pool.end();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('🛑 SIGINT received. Closing server...');
+  await pool.end();
+  process.exit(0);
 });

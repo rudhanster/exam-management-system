@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BarChart3, Users, Calendar, TrendingUp, Download, MessageSquare } from 'lucide-react';
 import Feedback from './Feedback.jsx';
-import Credits from './Credits.jsx';
 import AdminFeedbackViewer from './AdminFeedbackViewer.jsx';
+import AdminUserManagement from './AdminUserManagement.jsx';
 
 import config from './config'; // Adjust path based on file location
 const API_URL = config.apiUrl;
@@ -75,21 +75,13 @@ export default function AdminPanel() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header with Feedback and Credits buttons */}
-        <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-800 flex items-center gap-3 mb-2">
-              <BarChart3 className="w-10 h-10 text-indigo-600" />
-              Admin Dashboard
-            </h1>
-            <p className="text-gray-600">Monitor and manage exam duty allocations</p>
-          </div>
-          
-          {/* Feedback and Credits Buttons */}
-          <div className="flex items-center gap-3">
-
-            <Credits />
-          </div>
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-gray-800 flex items-center gap-3 mb-2">
+            <BarChart3 className="w-10 h-10 text-indigo-600" />
+            Admin Dashboard
+          </h1>
+          <p className="text-gray-600">Monitor and manage exam duty allocations</p>
         </div>
 
         {/* Tab Navigation */}

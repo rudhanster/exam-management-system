@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/msal-browser": "^4.26.0",
+    "@azure/msal-react": "^3.0.21",
     "axios": "^1.12.2",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.545.0",
