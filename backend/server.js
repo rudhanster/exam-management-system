@@ -164,13 +164,18 @@ app.get('/auth/login',
   })
 );
 
-// Callback route
-app.get('/auth/callback',
+// Callback route - MUST use POST for form_post response_mode
+app.post('/auth/callback',
   passport.authenticate('azuread-openidconnect', {
-    failureRedirect: '/'
+    failureRedirect: process.env.FRONTEND_URL || 'https://exam-management-system-74ix.vercel.app'
   }),
   (req, res) => {
-    res.redirect('/');
+    console.log('✅ Authentication successful, redirecting to frontend');
+    console.log('User:', req.user);
+    
+    // Redirect to frontend after successful authentication
+    const frontendUrl = process.env.FRONTEND_URL || 'https://exam-management-system-74ix.vercel.app';
+    res.redirect(`${frontendUrl}/dashboard`);
   }
 );
 
