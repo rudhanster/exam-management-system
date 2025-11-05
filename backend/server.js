@@ -126,18 +126,28 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+
 // ==============================
-// 🔐 Session & Passport (BEFORE routes)
+// 🔐 PostgreSQL Session Store
 // ==============================
+const pgSession = require('connect-pg-simple')(session);
+
 app.use(session({
+  store: new pgSession({
+    pool: pool,                    // Use the existing pool
+    tableName: 'session',          // Table name for sessions
+    createTableIfMissing: true     // Auto-create the table
+  }),
   secret: process.env.SESSION_SECRET || 'b462b9e8e760a9f2a4f057162fa8568abc9a14c2b',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: false,                 // Set to false for testing
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 24 * 60 * 60 * 1000,   // 24 hours
+    sameSite: 'lax'                // Important for OAuth
   },
+  name: 'sessionId'
 }));
 
 app.use(passport.initialize());
