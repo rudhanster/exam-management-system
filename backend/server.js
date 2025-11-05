@@ -136,19 +136,20 @@ app.use(session({
   store: new pgSession({
     pool: pool,
     tableName: 'session',
-    createTableIfMissing: true
+    createTableIfMissing: true,
+    pruneSessionInterval: 60 * 15 // Prune every 15 minutes
   }),
   secret: process.env.SESSION_SECRET || 'b462b9e8e760a9f2a4f057162fa8568abc9a14c2b',
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true,        // Changed to true to ensure session is created
   cookie: {
-    secure: true,                  // Changed to true
+    secure: true,
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000,
-    sameSite: 'none',              // Changed from 'lax' to 'none'
-    domain: '.onrender.com'        // Added domain
+    sameSite: 'none'               // Removed domain setting
   },
-  name: 'sessionId'
+  name: 'connect.sid',             // Use default session name
+  proxy: true                      // Trust proxy (important for Render)
 }));
 
 app.use(passport.initialize());
