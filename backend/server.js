@@ -95,6 +95,10 @@ app.use(cors({
     // Production whitelist
     const allowedOrigins = [
       'https://exam-management-system-74ix.vercel.app',
+      'https://exam-management-system-1-tksh.onrender.com',
+      'https://login.live.com',
+      'https://login.microsoftonline.com',
+      'https://account.live.com'
     ];
     
     if (allowedOrigins.includes(origin)) {
