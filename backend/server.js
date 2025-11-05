@@ -2375,6 +2375,17 @@ app.get('/api/test', (req, res) => {
 console.log('\n✅ All routes registered. Testing with: http://localhost:4000/api/test\n');
 
  
+// Serialize user for session
+passport.serializeUser((user, done) => {
+  console.log('📝 Serializing user:', user.email || user.upn);
+  done(null, user);
+});
+
+// Deserialize user from session
+passport.deserializeUser((user, done) => {
+  console.log('🔓 Deserializing user:', user.email || user.upn);
+  done(null, user);
+});
 
 // ==============================
 // 🚀 Start Server
