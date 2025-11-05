@@ -191,7 +191,7 @@ app.post('/auth/callback',
     
     // Redirect to frontend after successful authentication
     const frontendUrl = process.env.FRONTEND_URL || 'https://exam-management-system-74ix.vercel.app';
-    res.redirect(`${frontendUrl}/dashboard`);
+    res.redirect(frontendUrl); 
   }
 );
 
