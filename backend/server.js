@@ -126,7 +126,7 @@ app.use(express.urlencoded({ extended: true }));
 // 🔐 Session & Passport (BEFORE routes)
 // ==============================
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  secret: process.env.SESSION_SECRET || 'b462b9e8e760a9f2a4f057162fa8568abc9a14c2b',
   resave: false,
   saveUninitialized: false,
   cookie: {
