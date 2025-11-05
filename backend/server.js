@@ -92,9 +92,14 @@ app.use(cors({
       return callback(null, true);
     }
     
+    // Allow all Vercel preview URLs (ADD THIS SECTION)
+    if (origin.includes('vercel.app')) {
+      console.log('✅ Vercel domain - allowing');
+      return callback(null, true);
+    }
+    
     // Production whitelist
     const allowedOrigins = [
-      'https://exam-management-system-74ix.vercel.app',
       'https://exam-management-system-1-tksh.onrender.com',
       'https://login.live.com',
       'https://login.microsoftonline.com',
@@ -113,7 +118,6 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-
 
 
 // ==============================
