@@ -134,18 +134,19 @@ const pgSession = require('connect-pg-simple')(session);
 
 app.use(session({
   store: new pgSession({
-    pool: pool,                    // Use the existing pool
-    tableName: 'session',          // Table name for sessions
-    createTableIfMissing: true     // Auto-create the table
+    pool: pool,
+    tableName: 'session',
+    createTableIfMissing: true
   }),
   secret: process.env.SESSION_SECRET || 'b462b9e8e760a9f2a4f057162fa8568abc9a14c2b',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false,                 // Set to false for testing
+    secure: true,                  // Changed to true
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000,   // 24 hours
-    sameSite: 'lax'                // Important for OAuth
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'none',              // Changed from 'lax' to 'none'
+    domain: '.onrender.com'        // Added domain
   },
   name: 'sessionId'
 }));
