@@ -16,6 +16,7 @@ const azureConfig = {
   scope: ['openid', 'profile', 'email'],  // Removed 'User.Read'
   
   loggingLevel: 'info',
+  state: false 
 };
 {/*const azureConfig = {
   // ✅ FIXED: Use 'common' for multitenant support
