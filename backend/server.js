@@ -267,13 +267,14 @@ app.post('/auth/callback',
         return res.redirect('/');
       }
       
-      req.logIn(user, (err) => {
-        if (err) {
-          console.error('❌ Session login error:', err);
-          return res.status(500).json({ error: 'Session creation failed', details: err.message });
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          console.error('❌ Session login error:', loginErr);
+          return res.status(500).json({ error: 'Session creation failed', details: loginErr.message });
         }
         
         console.log('✅ User authenticated successfully:', user.email);
+        console.log('📝 Logged in user:', req.user);
         
         // ✅ CRITICAL: Explicitly save session before redirect
         req.session.save((saveErr) => {
@@ -284,7 +285,7 @@ app.post('/auth/callback',
           
           console.log('💾 Session saved successfully');
           console.log('🍪 Session ID:', req.sessionID);
-          console.log('👤 Session user:', req.session.passport?.user?.email);
+          console.log('👤 Session passport user:', req.session.passport);
           
           const frontendUrl = process.env.FRONTEND_URL || 'https://exam-management-system-74ix.vercel.app';
           console.log('🔄 Redirecting to:', frontendUrl);
