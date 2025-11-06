@@ -85,17 +85,22 @@ if (response.data.success) {
   console.log('✅ Token exchange successful');
   const user = response.data.user;
   
-  // Store user directly in state (don't rely on cookies)
+  // Use data directly from token exchange response
   setCurrentUser(user.email);
   setIsAuthenticated(true);
   setIsAdmin(user.isAdmin || false);
   setIsSuperAdmin(user.isSuperAdmin || false);
   setIsFaculty(user.isFaculty || false);
   
-  // Store in sessionStorage for persistence across page refreshes
-  sessionStorage.setItem('user', JSON.stringify(user));
+  // Store in sessionStorage to persist across page refreshes
+  sessionStorage.setItem('userData', JSON.stringify({
+    email: user.email,
+    isAdmin: user.isAdmin || false,
+    isSuperAdmin: user.isSuperAdmin || false,
+    isFaculty: user.isFaculty || false
+  }));
   
-  // Set view mode
+  // Auto-select view mode
   if (user.isAdmin && !user.isFaculty) {
     setViewMode('admin');
   } else if (user.isAdmin && user.isFaculty) {
@@ -105,7 +110,7 @@ if (response.data.success) {
     fetchFacultyData(user.email);
   }
   
-  // Clean URL
+  // Clean URL (remove token)
   window.history.replaceState({}, document.title, window.location.pathname);
 }
       } catch (err) {
@@ -124,6 +129,34 @@ if (response.data.success) {
   // ============================================
 useEffect(() => {
   const checkAuth = async () => {
+    // First, check sessionStorage
+    const storedUserData = sessionStorage.getItem('userData');
+    
+    if (storedUserData) {
+      // Use stored data instead of API call
+      const user = JSON.parse(storedUserData);
+      setCurrentUser(user.email);
+      setIsAuthenticated(true);
+      setIsAdmin(user.isAdmin);
+      setIsSuperAdmin(user.isSuperAdmin);
+      setIsFaculty(user.isFaculty);
+      
+      // Auto-select view mode
+      if (user.isAdmin && !user.isFaculty) {
+        setViewMode('admin');
+        setAdminView('dashboard');
+      } else if (user.isAdmin && user.isFaculty) {
+        setViewMode('admin');
+        setAdminView('dashboard');
+      } else if (user.isFaculty) {
+        setViewMode('faculty');
+        fetchFacultyData(user.email);
+      }
+      
+      return; // Don't call API if we have stored data
+    }
+    
+    // Only call API if no stored data
     try {
       const response = await axios.get(`${API_URL.replace('/api', '')}/auth/user`, {
         withCredentials: true
@@ -142,7 +175,6 @@ useEffect(() => {
           setViewMode('admin');
           setAdminView('dashboard');
         } else if (user.isAdmin && user.isFaculty) {
-          // Dual role - default to admin but allow switching
           setViewMode('admin');
           setAdminView('dashboard');
         } else if (user.isFaculty) {
