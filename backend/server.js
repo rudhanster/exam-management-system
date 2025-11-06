@@ -339,7 +339,7 @@ app.post('/auth/exchange-token', (req, res) => {
       res.json({ 
         success: true,
         user: tokenData.user,
-        sessionId: req.sessionID // For debugging
+        sessionId: req.sessionID
       });
     });
   });
