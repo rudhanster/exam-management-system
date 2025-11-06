@@ -80,37 +80,34 @@ useEffect(() => {
           { withCredentials: true }
         );
         
-        if (response.data.success) {
-          console.log('✅ Token exchange successful');
-          const user = response.data.user;
-          setCurrentUser(user.email);
-          setIsAuthenticated(true);
-          
-          // Fetch user roles
-          const userResponse = await axios.get(`${API_URL.replace('/api', '')}/auth/user`, {
-            withCredentials: true
-          });
-          
-          if (userResponse.data.user) {
-            const userData = userResponse.data.user;
-            setIsAdmin(userData.isAdmin);
-            setIsSuperAdmin(userData.isSuperAdmin);
-            setIsFaculty(userData.isFaculty);
-            
-            // Auto-select view mode
-            if (userData.isAdmin && !userData.isFaculty) {
-              setViewMode('admin');
-            } else if (userData.isAdmin && userData.isFaculty) {
-              setViewMode('admin');
-            } else if (userData.isFaculty) {
-              setViewMode('faculty');
-              fetchFacultyData(userData.email);
-            }
-          }
-          
-          // Clean URL (remove token)
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
+        // After successful token exchange
+if (response.data.success) {
+  console.log('✅ Token exchange successful');
+  const user = response.data.user;
+  
+  // Store user directly in state (don't rely on cookies)
+  setCurrentUser(user.email);
+  setIsAuthenticated(true);
+  setIsAdmin(user.isAdmin || false);
+  setIsSuperAdmin(user.isSuperAdmin || false);
+  setIsFaculty(user.isFaculty || false);
+  
+  // Store in sessionStorage for persistence across page refreshes
+  sessionStorage.setItem('user', JSON.stringify(user));
+  
+  // Set view mode
+  if (user.isAdmin && !user.isFaculty) {
+    setViewMode('admin');
+  } else if (user.isAdmin && user.isFaculty) {
+    setViewMode('admin');
+  } else if (user.isFaculty) {
+    setViewMode('faculty');
+    fetchFacultyData(user.email);
+  }
+  
+  // Clean URL
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
       } catch (err) {
         console.error('❌ Token exchange failed:', err);
         // Clean URL and show login
