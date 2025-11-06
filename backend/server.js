@@ -141,7 +141,7 @@ app.use(session({
   }),
   secret: process.env.SESSION_SECRET || 'b462b9e8e760a9f2a4f057162fa8568abc9a14c2b',
   resave: false,
-  saveUninitialized: true,        // Changed to true to ensure session is created
+  saveUninitialized: false,        // Changed to true to ensure session is created
   cookie: {
     secure: true,
     httpOnly: true,
@@ -185,11 +185,12 @@ app.get('/auth/login',
 
 // ✅ UPDATE THIS ROUTE - Get current user with admin status
 app.get('/auth/user', async (req, res) => {
-    console.log('🔍 /auth/user called');
+  console.log('🔍 /auth/user called');
   console.log('🍪 Session ID:', req.sessionID);
   console.log('🔐 Is authenticated:', req.isAuthenticated());
-  console.log('👤 Session user:', req.session?.passport?.user);
-  console.log('📋 Session data:', req.session);
+  console.log('👤 Session user:', req.user);
+  console.log('📦 Session passport:', req.session.passport);
+  console.log('📋 Full session data:', JSON.stringify(req.session, null, 2));
   if (req.isAuthenticated()) {
     const email = req.user.email;
     
@@ -313,6 +314,36 @@ app.post('/auth/exchange-token', (req, res) => {
     authTokens.delete(token);
     return res.status(401).json({ error: 'Token expired' });
   }
+  
+  // Login user and create session
+  req.logIn(tokenData.user, (err) => {
+    if (err) {
+      console.error('❌ Session creation error:', err);
+      return res.status(500).json({ error: 'Session creation failed' });
+    }
+    
+    // CRITICAL: Explicitly save session before responding
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        console.error('❌ Session save error:', saveErr);
+        return res.status(500).json({ error: 'Session save failed' });
+      }
+      
+      // Delete token (one-time use)
+      authTokens.delete(token);
+      
+      console.log('✅ Token exchanged for session:', tokenData.user.email);
+      console.log('🍪 Session ID:', req.sessionID);
+      console.log('👤 Session user:', req.session.passport?.user);
+      
+      res.json({ 
+        success: true,
+        user: tokenData.user,
+        sessionId: req.sessionID // For debugging
+      });
+    });
+  });
+});
   
   // Login user and create session
   req.logIn(tokenData.user, (err) => {
