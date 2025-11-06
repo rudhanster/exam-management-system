@@ -363,7 +363,6 @@ app.post('/auth/exchange-token', (req, res) => {
       user: tokenData.user
     });
   });
-});
 
 app.post('/auth/logout', (req, res) => {
   req.logout((err) => {
