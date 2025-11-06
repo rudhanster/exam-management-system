@@ -129,10 +129,18 @@ if (response.data.success) {
   // ============================================
 useEffect(() => {
   const checkAuth = async () => {
+    // Skip auth check if we have a token in URL (token exchange is handling it)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('token')) {
+      console.log('⏭️ Skipping auth check - token exchange in progress');
+      return;
+    }
+    
     // First, check sessionStorage
     const storedUserData = sessionStorage.getItem('userData');
     
     if (storedUserData) {
+      console.log('📦 Loading user from sessionStorage');
       // Use stored data instead of API call
       const user = JSON.parse(storedUserData);
       setCurrentUser(user.email);
@@ -156,7 +164,7 @@ useEffect(() => {
       return; // Don't call API if we have stored data
     }
     
-    // Only call API if no stored data
+    // Only call API if no stored data and no token
     try {
       const response = await axios.get(`${API_URL.replace('/api', '')}/auth/user`, {
         withCredentials: true
