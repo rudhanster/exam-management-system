@@ -56,6 +56,7 @@ export default function App() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [isFaculty, setIsFaculty] = useState(false);
   const [viewMode, setViewMode] = useState('auto'); // 'auto', 'admin', 'faculty'
+  const [isTokenExchanging, setIsTokenExchanging] = useState(false);
 
   const toggleBlock = (timeRange) => {
     setOpenBlocks((prev) => ({
@@ -64,14 +65,13 @@ export default function App() {
     }));
   };
 
-  // Add this near the top with other useEffects
 useEffect(() => {
-  // Check if we're being redirected from auth with a token
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
   
   if (token) {
-    // Exchange token for session
+    setIsTokenExchanging(true); // ← Add this
+    
     const exchangeToken = async () => {
       try {
         console.log('🎫 Exchanging auth token...');
@@ -80,43 +80,39 @@ useEffect(() => {
           { withCredentials: true }
         );
         
-        // After successful token exchange
-if (response.data.success) {
-  console.log('✅ Token exchange successful');
-  const user = response.data.user;
-  
-  // Use data directly from token exchange response
-  setCurrentUser(user.email);
-  setIsAuthenticated(true);
-  setIsAdmin(user.isAdmin || false);
-  setIsSuperAdmin(user.isSuperAdmin || false);
-  setIsFaculty(user.isFaculty || false);
-  
-  // Store in sessionStorage to persist across page refreshes
-  sessionStorage.setItem('userData', JSON.stringify({
-    email: user.email,
-    isAdmin: user.isAdmin || false,
-    isSuperAdmin: user.isSuperAdmin || false,
-    isFaculty: user.isFaculty || false
-  }));
-  
-  // Auto-select view mode
-  if (user.isAdmin && !user.isFaculty) {
-    setViewMode('admin');
-  } else if (user.isAdmin && user.isFaculty) {
-    setViewMode('admin');
-  } else if (user.isFaculty) {
-    setViewMode('faculty');
-    fetchFacultyData(user.email);
-  }
-  
-  // Clean URL (remove token)
-  window.history.replaceState({}, document.title, window.location.pathname);
-}
+        if (response.data.success) {
+          console.log('✅ Token exchange successful');
+          const user = response.data.user;
+          
+          setCurrentUser(user.email);
+          setIsAuthenticated(true);
+          setIsAdmin(user.isAdmin || false);
+          setIsSuperAdmin(user.isSuperAdmin || false);
+          setIsFaculty(user.isFaculty || false);
+          
+          sessionStorage.setItem('userData', JSON.stringify({
+            email: user.email,
+            isAdmin: user.isAdmin || false,
+            isSuperAdmin: user.isSuperAdmin || false,
+            isFaculty: user.isFaculty || false
+          }));
+          
+          if (user.isAdmin && !user.isFaculty) {
+            setViewMode('admin');
+          } else if (user.isAdmin && user.isFaculty) {
+            setViewMode('admin');
+          } else if (user.isFaculty) {
+            setViewMode('faculty');
+            fetchFacultyData(user.email);
+          }
+          
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
       } catch (err) {
         console.error('❌ Token exchange failed:', err);
-        // Clean URL and show login
         window.history.replaceState({}, document.title, '/');
+      } finally {
+        setIsTokenExchanging(false); // ← Add this
       }
     };
     
@@ -129,6 +125,10 @@ if (response.data.success) {
   // ============================================
 useEffect(() => {
   const checkAuth = async () => {
+     if (isTokenExchanging) {
+      console.log('⏭️ Skipping - token exchange in progress');
+      return;
+    }
     // Skip auth check if we have a token in URL (token exchange is handling it)
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('token')) {
