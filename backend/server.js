@@ -197,6 +197,11 @@ app.post('/auth/callback',
 
 // ✅ UPDATE THIS ROUTE - Get current user with admin status
 app.get('/auth/user', async (req, res) => {
+    console.log('🔍 /auth/user called');
+  console.log('🍪 Session ID:', req.sessionID);
+  console.log('🔐 Is authenticated:', req.isAuthenticated());
+  console.log('👤 Session user:', req.session?.passport?.user);
+  console.log('📋 Session data:', req.session);
   if (req.isAuthenticated()) {
     const email = req.user.email;
     
@@ -269,15 +274,27 @@ app.post('/auth/callback',
         }
         
         console.log('✅ User authenticated successfully:', user.email);
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        console.log('🔄 Redirecting to:', frontendUrl);
-        return res.redirect(frontendUrl);
+        
+        // ✅ CRITICAL: Explicitly save session before redirect
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error('❌ Session save error:', saveErr);
+            return res.status(500).send('Session save failed');
+          }
+          
+          console.log('💾 Session saved successfully');
+          console.log('🍪 Session ID:', req.sessionID);
+          console.log('👤 Session user:', req.session.passport?.user?.email);
+          
+          const frontendUrl = process.env.FRONTEND_URL || 'https://exam-management-system-74ix.vercel.app';
+          console.log('🔄 Redirecting to:', frontendUrl);
+          
+          res.redirect(frontendUrl);
+        });
       });
     })(req, res, next);
   }
 );
-
-
 
 app.post('/auth/logout', (req, res) => {
   req.logout((err) => {
