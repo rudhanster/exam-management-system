@@ -242,6 +242,25 @@ app.post('/auth/logout', (req, res) => {
 
 app.get('/auth/login', passport.authenticate('azuread-openidconnect', { failureRedirect: '/' }));
 
+// ============================================
+// TEMPORARY TOKEN STORE (for auth token exchange)
+// ============================================
+const authTokens = new Map(); // Store: token -> user data
+const TOKEN_EXPIRY = 5 * 60 * 1000; // 5 minutes
+
+// Clean up expired tokens every minute
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, data] of authTokens.entries()) {
+    if (now > data.expires) {
+      authTokens.delete(token);
+    }
+  }
+}, 60 * 1000);
+
+// ============================================
+// AUTH CALLBACK - Generate token and redirect
+// ============================================
 app.post('/auth/callback',
   (req, res, next) => {
     passport.authenticate('azuread-openidconnect', (err, user, info) => {
@@ -255,35 +274,65 @@ app.post('/auth/callback',
         return res.redirect('/');
       }
       
-      req.logIn(user, (loginErr) => {
-        if (loginErr) {
-          console.error('❌ Session login error:', loginErr);
-          return res.status(500).json({ error: 'Session creation failed', details: loginErr.message });
-        }
-        
-        console.log('✅ User authenticated successfully:', user.email);
-        console.log('📝 Logged in user:', req.user);
-        
-        // ✅ CRITICAL: Explicitly save session before redirect
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            console.error('❌ Session save error:', saveErr);
-            return res.status(500).send('Session save failed');
-          }
-          
-          console.log('💾 Session saved successfully');
-          console.log('🍪 Session ID:', req.sessionID);
-          console.log('👤 Session passport user:', req.session.passport);
-          
-          const frontendUrl = process.env.FRONTEND_URL || 'https://exam-management-system-74ix.vercel.app';
-          console.log('🔄 Redirecting to:', frontendUrl);
-          
-          res.redirect(frontendUrl);
-        });
+      console.log('✅ User authenticated successfully:', user.email);
+      
+      // Generate temporary token
+      const token = require('crypto').randomBytes(32).toString('hex');
+      authTokens.set(token, {
+        user: user,
+        expires: Date.now() + TOKEN_EXPIRY
       });
+      
+      console.log('🎫 Generated auth token:', token);
+      
+      // Redirect to frontend with token
+      const frontendUrl = process.env.FRONTEND_URL || 'https://exam-management-system-74ix.vercel.app';
+      res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
+      
     })(req, res, next);
   }
 );
+
+// ============================================
+// TOKEN EXCHANGE - Convert token to session
+// ============================================
+app.post('/auth/exchange-token', (req, res) => {
+  const { token } = req.body;
+  
+  if (!token) {
+    return res.status(400).json({ error: 'Token required' });
+  }
+  
+  const tokenData = authTokens.get(token);
+  
+  if (!tokenData) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+  
+  if (Date.now() > tokenData.expires) {
+    authTokens.delete(token);
+    return res.status(401).json({ error: 'Token expired' });
+  }
+  
+  // Login user and create session
+  req.logIn(tokenData.user, (err) => {
+    if (err) {
+      console.error('❌ Session creation error:', err);
+      return res.status(500).json({ error: 'Session creation failed' });
+    }
+    
+    // Delete token (one-time use)
+    authTokens.delete(token);
+    
+    console.log('✅ Token exchanged for session:', tokenData.user.email);
+    console.log('🍪 Session ID:', req.sessionID);
+    
+    res.json({ 
+      success: true,
+      user: tokenData.user
+    });
+  });
+});
 
 app.post('/auth/logout', (req, res) => {
   req.logout((err) => {

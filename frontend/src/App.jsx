@@ -64,6 +64,64 @@ export default function App() {
     }));
   };
 
+  // Add this near the top with other useEffects
+useEffect(() => {
+  // Check if we're being redirected from auth with a token
+  const urlParams = new URLSearchParams(window.location.search);
+  const token = urlParams.get('token');
+  
+  if (token) {
+    // Exchange token for session
+    const exchangeToken = async () => {
+      try {
+        console.log('🎫 Exchanging auth token...');
+        const response = await axios.post(`${API_URL.replace('/api', '')}/auth/exchange-token`, 
+          { token },
+          { withCredentials: true }
+        );
+        
+        if (response.data.success) {
+          console.log('✅ Token exchange successful');
+          const user = response.data.user;
+          setCurrentUser(user.email);
+          setIsAuthenticated(true);
+          
+          // Fetch user roles
+          const userResponse = await axios.get(`${API_URL.replace('/api', '')}/auth/user`, {
+            withCredentials: true
+          });
+          
+          if (userResponse.data.user) {
+            const userData = userResponse.data.user;
+            setIsAdmin(userData.isAdmin);
+            setIsSuperAdmin(userData.isSuperAdmin);
+            setIsFaculty(userData.isFaculty);
+            
+            // Auto-select view mode
+            if (userData.isAdmin && !userData.isFaculty) {
+              setViewMode('admin');
+            } else if (userData.isAdmin && userData.isFaculty) {
+              setViewMode('admin');
+            } else if (userData.isFaculty) {
+              setViewMode('faculty');
+              fetchFacultyData(userData.email);
+            }
+          }
+          
+          // Clean URL (remove token)
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      } catch (err) {
+        console.error('❌ Token exchange failed:', err);
+        // Clean URL and show login
+        window.history.replaceState({}, document.title, '/');
+      }
+    };
+    
+    exchangeToken();
+  }
+}, []);
+
   // ============================================
   // AUTHENTICATION CHECK
   // ============================================
