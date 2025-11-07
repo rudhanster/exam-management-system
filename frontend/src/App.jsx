@@ -57,6 +57,7 @@ export default function App() {
   const [isFaculty, setIsFaculty] = useState(false);
   const [viewMode, setViewMode] = useState('auto'); // 'auto', 'admin', 'faculty'
   const [isTokenExchanging, setIsTokenExchanging] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const toggleBlock = (timeRange) => {
     setOpenBlocks((prev) => ({
@@ -113,6 +114,7 @@ useEffect(() => {
         window.history.replaceState({}, document.title, '/');
       } finally {
         setIsTokenExchanging(false); // ← Add this
+        setAuthLoading(false); 
       }
     };
     
@@ -198,7 +200,8 @@ useEffect(() => {
   };
   
   checkAuth();
-}, []);
+}, [isTokenExchanging]);
+setAuthLoading(false);
 
   useEffect(() => {
     setIsAuthenticated(!!currentUser);
