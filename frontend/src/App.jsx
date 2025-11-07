@@ -82,35 +82,41 @@ useEffect(() => {
         );
         
         if (response.data.success) {
-          console.log('✅ Token exchange successful');
-          const user = response.data.user;
-          console.log('👤 User data received:', user);
-          
-          setCurrentUser(user.email);
-          setIsAuthenticated(true);
-          setIsAdmin(user.isAdmin || false);
-          setIsSuperAdmin(user.isSuperAdmin || false);
-          setIsFaculty(user.isFaculty || false);
-          
-          sessionStorage.setItem('userData', JSON.stringify({
-            email: user.email,
-            isAdmin: user.isAdmin || false,
-            isSuperAdmin: user.isSuperAdmin || false,
-            isFaculty: user.isFaculty || false
-          }));
-          console.log('💾 Saved to sessionStorage:', userData); 
-          
-          if (user.isAdmin && !user.isFaculty) {
-            setViewMode('admin');
-          } else if (user.isAdmin && user.isFaculty) {
-            setViewMode('admin');
-          } else if (user.isFaculty) {
-            setViewMode('faculty');
-            fetchFacultyData(user.email);
-          }
-          
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
+  console.log('✅ Token exchange successful');
+  const user = response.data.user;
+  
+  console.log('👤 User data received:', user);
+  
+  // Set state FIRST using `user` (not `userData`)
+  setCurrentUser(user.email);
+  setIsAuthenticated(true);
+  setIsAdmin(user.isAdmin || false);
+  setIsSuperAdmin(user.isSuperAdmin || false);
+  setIsFaculty(user.isFaculty || false);
+  
+  // THEN create userData object for storage
+  const userData = {
+    email: user.email,
+    isAdmin: user.isAdmin || false,
+    isSuperAdmin: user.isSuperAdmin || false,
+    isFaculty: user.isFaculty || false
+  };
+  
+  sessionStorage.setItem('userData', JSON.stringify(userData));
+  console.log('💾 Saved to sessionStorage:', userData);
+  
+  // Auto-select view mode using `user` (not `userData`)
+  if (user.isAdmin && !user.isFaculty) {
+    setViewMode('admin');
+  } else if (user.isAdmin && user.isFaculty) {
+    setViewMode('admin');
+  } else if (user.isFaculty) {
+    setViewMode('faculty');
+    fetchFacultyData(user.email);
+  }
+  
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
       } catch (err) {
         console.error('❌ Token exchange failed:', err);
         window.history.replaceState({}, document.title, '/');
