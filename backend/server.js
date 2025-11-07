@@ -296,7 +296,7 @@ app.post('/auth/callback',
 // ============================================
 // TOKEN EXCHANGE - Convert token to session
 // ============================================
-app.post('/auth/exchange-token', (req, res) => {
+app.post('/auth/exchange-token', async (req, res) => {
   const { token } = req.body;
   
   if (!token) {
@@ -315,7 +315,7 @@ app.post('/auth/exchange-token', (req, res) => {
   }
   
   // Login user and create session
-  req.logIn(tokenData.user, (err) => {
+  req.logIn(tokenData.user, async (err) => {
     if (err) {
       console.error('❌ Session creation error:', err);
       return res.status(500).json({ error: 'Session creation failed' });
@@ -327,10 +327,44 @@ app.post('/auth/exchange-token', (req, res) => {
     console.log('✅ Token exchanged for session:', tokenData.user.email);
     console.log('🍪 Session ID:', req.sessionID);
     
-    res.json({ 
-      success: true,
-      user: tokenData.user
-    });
+    // Check user roles before responding
+    const email = tokenData.user.email;
+    
+    try {
+      // Check if user is admin
+      const adminCheck = await pool.query(
+        'SELECT email, is_super_admin FROM admins WHERE email = $1',
+        [email]
+      );
+      
+      console.log('🔍 Admin check for', email, ':', adminCheck.rows);
+      
+      // Check if user is faculty
+      const facultyCheck = await pool.query(
+        'SELECT email, name, cadre FROM faculty WHERE email = $1',
+        [email]
+      );
+      
+      console.log('🔍 Faculty check for', email, ':', facultyCheck.rows);
+      
+      const userData = {
+        email: email,
+        isAdmin: adminCheck.rows.length > 0,
+        isSuperAdmin: adminCheck.rows.length > 0 ? adminCheck.rows[0].is_super_admin : false,
+        isFaculty: facultyCheck.rows.length > 0,
+        facultyData: facultyCheck.rows.length > 0 ? facultyCheck.rows[0] : null
+      };
+      
+      console.log('👤 Returning user data:', userData);
+      
+      res.json({ 
+        success: true,
+        user: userData
+      });
+    } catch (err) {
+      console.error('❌ Error checking user roles:', err);
+      res.status(500).json({ error: 'Failed to check user roles' });
+    }
   });
 });
 
