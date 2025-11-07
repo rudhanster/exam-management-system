@@ -84,6 +84,7 @@ useEffect(() => {
         if (response.data.success) {
           console.log('✅ Token exchange successful');
           const user = response.data.user;
+          console.log('👤 User data received:', user);
           
           setCurrentUser(user.email);
           setIsAuthenticated(true);
@@ -97,6 +98,7 @@ useEffect(() => {
             isSuperAdmin: user.isSuperAdmin || false,
             isFaculty: user.isFaculty || false
           }));
+          console.log('💾 Saved to sessionStorage:', userData); 
           
           if (user.isAdmin && !user.isFaculty) {
             setViewMode('admin');
