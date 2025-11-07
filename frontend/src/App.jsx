@@ -125,83 +125,62 @@ useEffect(() => {
   // ============================================
   // AUTHENTICATION CHECK
   // ============================================
+// 1. Token exchange useEffect
+useEffect(() => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const token = urlParams.get('token');
+  
+  if (token) {
+    setIsTokenExchanging(true);
+    setAuthLoading(true); // ← Add this
+    
+    const exchangeToken = async () => {
+      try {
+        // ... your token exchange code ...
+      } catch (err) {
+        console.error('❌ Token exchange failed:', err);
+        window.history.replaceState({}, document.title, '/');
+        setAuthLoading(false); // ← Add here too
+      } finally {
+        setIsTokenExchanging(false);
+        setAuthLoading(false); // ← Keep this
+      }
+    };
+    
+    exchangeToken();
+  } else {
+    // No token, not loading
+    setAuthLoading(false); // ← Add this for when there's no token
+  }
+}, []);
+
+// 2. Auth check useEffect
 useEffect(() => {
   const checkAuth = async () => {
-     if (isTokenExchanging) {
-      console.log('⏭️ Skipping - token exchange in progress');
-      return;
-    }
-    // Skip auth check if we have a token in URL (token exchange is handling it)
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('token')) {
-      console.log('⏭️ Skipping auth check - token exchange in progress');
-      return;
+    if (isTokenExchanging) {
+      return; // Don't set authLoading here
     }
     
-    // First, check sessionStorage
     const storedUserData = sessionStorage.getItem('userData');
     
     if (storedUserData) {
-      console.log('📦 Loading user from sessionStorage');
-      // Use stored data instead of API call
-      const user = JSON.parse(storedUserData);
-      setCurrentUser(user.email);
-      setIsAuthenticated(true);
-      setIsAdmin(user.isAdmin);
-      setIsSuperAdmin(user.isSuperAdmin);
-      setIsFaculty(user.isFaculty);
-      
-      // Auto-select view mode
-      if (user.isAdmin && !user.isFaculty) {
-        setViewMode('admin');
-        setAdminView('dashboard');
-      } else if (user.isAdmin && user.isFaculty) {
-        setViewMode('admin');
-        setAdminView('dashboard');
-      } else if (user.isFaculty) {
-        setViewMode('faculty');
-        fetchFacultyData(user.email);
-      }
-      
-      return; // Don't call API if we have stored data
+      // ... set user data ...
+      setAuthLoading(false); // ← Keep this
+      return;
     }
     
-    // Only call API if no stored data and no token
     try {
-      const response = await axios.get(`${API_URL.replace('/api', '')}/auth/user`, {
-        withCredentials: true
-      });
-      
-      if (response.data.user) {
-        const user = response.data.user;
-        setCurrentUser(user.email);
-        setIsAuthenticated(true);
-        setIsAdmin(user.isAdmin);
-        setIsSuperAdmin(user.isSuperAdmin);
-        setIsFaculty(user.isFaculty);
-        
-        // Auto-select view mode
-        if (user.isAdmin && !user.isFaculty) {
-          setViewMode('admin');
-          setAdminView('dashboard');
-        } else if (user.isAdmin && user.isFaculty) {
-          setViewMode('admin');
-          setAdminView('dashboard');
-        } else if (user.isFaculty) {
-          setViewMode('faculty');
-          fetchFacultyData(user.email);
-        }
-      }
+      // ... API call ...
+      setAuthLoading(false); // ← Keep this
     } catch (err) {
       console.log('Not authenticated');
-      setIsAuthenticated(false);
-      setCurrentUser(null);
+      setAuthLoading(false); // ← Keep this
     }
   };
   
   checkAuth();
 }, [isTokenExchanging]);
-setAuthLoading(false);
+
 
   useEffect(() => {
     setIsAuthenticated(!!currentUser);
