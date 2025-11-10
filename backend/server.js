@@ -158,7 +158,7 @@ app.use(passport.session());
 // ==============================
 // 🔗 Attach pool + cache to requests
 // ==============================
-app.use((req, res, next) => {
+app.req, res, next) => {
   req.pool = pool;
   req.cache = cache;
   next();
@@ -469,10 +469,7 @@ app.post('/api/admins', requireAuth, requireSuperAdmin, async (req, res) => {
     const existingAdmin = await pool.query(
       'SELECT email FROM admins WHERE email = $1',
       [email]
-    );
-    
-    if (existingAdmin.rows.length > 0) {
-      return res.status(400).json({ error: 'Admin already exists' });
+    )
     }
     
     // Add admin

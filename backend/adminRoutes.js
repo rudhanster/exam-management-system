@@ -1568,138 +1568,152 @@ router.post('/upload-exam-data/:examTypeId', upload.single('excelFile'), async (
       errors: []
     };
 
-    console.log(`📄 Processing ${rows.length} rows for Exam Type ID: ${examTypeId}`);
+    console.log(`📤 Upload started for examTypeId: ${examTypeId}`);
+    console.log(`📊 Rows to process: ${rows.length}`);
 
     await client.query('BEGIN');
 
     for (let i = 0; i < rows.length; i++) {
-  const row = rows[i];
-  const rowNum = i + 2; // Excel rows start at 2 (assuming headers on row 1)
+      const row = rows[i];
+      const rowNum = i + 2; // Excel rows start at 2 (assuming headers on row 1)
 
-  try {
-    // 🧠 Normalize keys: lowercase + trimmed
-    const normalizedRow = {};
-    for (const [key, value] of Object.entries(row)) {
-      const cleanKey = key
-  .toLowerCase()
-  .replace(/\u00A0/g, ' ') // Replace non-breaking spaces
-  .trim();
+      try {
+        // 🧠 Normalize keys: lowercase + trimmed
+        const normalizedRow = {};
+        for (const [key, value] of Object.entries(row)) {
+          const cleanKey = key
+            .toLowerCase()
+            .replace(/\u00A0/g, ' ') // Replace non-breaking spaces
+            .trim();
 
-      normalizedRow[cleanKey] = value;
+          normalizedRow[cleanKey] = value;
+        }
+
+        const get = (key) => normalizedRow[key.toLowerCase().trim()] ?? null;
+
+        // 🧹 Skip empty rows
+        const allValues = Object.values(normalizedRow).map(v => (v ? v.toString().trim() : ''));
+        if (allValues.every(v => v === '')) {
+          console.log(`⚪ Skipping empty row ${rowNum}`);
+          continue;
+        }
+
+        // 🧾 Extract normalized values
+        const branch = get('branch')?.trim() || null;
+        const courseCode = get('course code')?.trim() || get('coursecode') || null;
+        const courseName = get('course name')?.trim() || null;
+        const semester = parseInt(get('semester')) || 1;
+        const studentCount = parseInt(get('student count')) || 0;
+        const dateVal = get('date');
+        const startTimeVal = get('start time');
+        const endTimeVal = get('end time');
+        const roomsRequired = parseInt(get('rooms required')) || 1;
+
+        // 🚨 Validate required fields
+        if (!courseCode || !dateVal) {
+          results.errors.push({ row: rowNum, error: 'Missing course code or date', courseCode });
+          continue;
+        }
+
+        // 🚨 Validate branch is present
+        if (!branch) {
+          results.errors.push({ row: rowNum, error: 'Missing branch', courseCode });
+          continue;
+        }
+
+        // ✅ Parse date and time safely
+        const sessionDate = parseExcelDate(dateVal);
+        const startTime = parseExcelTime(startTimeVal);
+        const endTime = parseExcelTime(endTimeVal);
+
+        if (!sessionDate || !startTime || !endTime) {
+          results.errors.push({ row: rowNum, error: 'Invalid date or time', courseCode });
+          continue;
+        }
+
+        // ✅ Step 1: Upsert course with composite key (branch, course_code)
+        const courseResult = await client.query(
+          `INSERT INTO course (branch, course_code, course_name, semester, student_count)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (branch, course_code) 
+           DO UPDATE SET 
+             course_name = EXCLUDED.course_name,
+             semester = EXCLUDED.semester,
+             student_count = EXCLUDED.student_count
+           RETURNING id, (xmax = 0) AS is_new`,
+          [branch, courseCode, courseName, semester, studentCount]
+        );
+
+        const courseId = courseResult.rows[0].id;
+        const isNewCourse = courseResult.rows[0].is_new;
+
+        if (isNewCourse) {
+          results.coursesCreated++;
+        } else {
+          results.coursesUpdated++;
+        }
+
+        // ✅ Step 2: Prevent duplicate sessions
+        const dupCheck = await client.query(
+          `SELECT id FROM exam_session
+           WHERE session_date = $1 AND start_time = $2 AND course_id = $3 AND exam_type_id = $4`,
+          [sessionDate, startTime, courseId, examTypeId]
+        );
+
+        if (dupCheck.rows.length > 0) {
+          results.errors.push({ 
+            row: rowNum, 
+            error: 'Duplicate session', 
+            courseCode, 
+            branch,
+            date: sessionDate, 
+            time: startTime 
+          });
+          continue;
+        }
+
+        // ✅ Step 3: Insert exam session
+        const sessionInsert = await client.query(
+          `INSERT INTO exam_session 
+           (session_date, start_time, end_time, rooms_required, exam_type_id, course_id, status)
+           VALUES ($1, $2, $3, $4, $5::uuid, $6, 'open')
+           RETURNING id`,
+          [sessionDate, startTime, endTime, roomsRequired, examTypeId, courseId]
+        );
+
+        const sessionId = sessionInsert.rows[0].id;
+        results.sessionsCreated++;
+
+        // ✅ Step 4: Trigger will automatically create room slots via assign_rooms_to_session()
+        // No manual slot creation needed if trigger is active
+
+        console.log(`✅ Created session for ${branch}-${courseCode} on ${sessionDate} at ${startTime}`);
+
+      } catch (err) {
+        console.error(`❌ Error at row ${rowNum}:`, err.message);
+        results.errors.push({
+          row: rowNum,
+          courseCode: row['Course code'] || row['course code'] || '',
+          error: err.message
+        });
+      }
     }
 
-    const get = (key) => normalizedRow[key.toLowerCase().trim()] ?? null;
-
-    // 🧹 Skip empty rows
-    const allValues = Object.values(normalizedRow).map(v => (v ? v.toString().trim() : ''));
-    if (allValues.every(v => v === '')) {
-      console.log(`⚪ Skipping empty row ${rowNum}`);
-      continue;
-    }
-
-    // 🧾 Extract normalized values
-    const branch = get('branch')?.trim() || null;
-    const courseCode = get('course code')?.trim() || get('coursecode') || null;
-    const courseName = get('course name')?.trim() || null;
-    const semester = parseInt(get('semester')) || 1;
-    const studentCount = parseInt(get('student count')) || 0;
-    const dateVal = get('date');
-    const startTimeVal = get('start time');
-    const endTimeVal = get('end time');
-    const roomsRequired = parseInt(get('rooms required')) || 1;
-
-    // 🚨 Validate required fields
-    if (!courseCode || !dateVal) {
-      results.errors.push({ row: rowNum, error: 'Missing Course Code or Date', courseCode });
-      continue;
-    }
-
-    // ✅ Parse date and time safely
-    const sessionDate = parseExcelDate(dateVal);
-    const startTime = parseExcelTime(startTimeVal);
-    const endTime = parseExcelTime(endTimeVal);
-
-    if (!sessionDate || !startTime || !endTime) {
-      results.errors.push({ row: rowNum, error: 'Invalid Date or Time', courseCode });
-      continue;
-    }
-
-    // ✅ Step 1: Find or create course
-    const existingCourse = await client.query(
-      'SELECT id FROM course WHERE course_code = $1 LIMIT 1',
-      [courseCode]
-    );
-
-    let courseId;
-    if (existingCourse.rows.length > 0) {
-      courseId = existingCourse.rows[0].id;
-      await client.query(
-        `UPDATE course 
-         SET branch = $1, course_name = $2, semester = $3, student_count = $4 
-         WHERE id = $5`,
-        [branch, courseName, semester, studentCount, courseId]
-      );
-      results.coursesUpdated++;
-    } else {
-      const newCourse = await client.query(
-        `INSERT INTO course (branch, course_code, course_name, semester, student_count)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id`,
-        [branch, courseCode, courseName, semester, studentCount]
-      );
-      courseId = newCourse.rows[0].id;
-      results.coursesCreated++;
-    }
-
-    // ✅ Step 2: Prevent duplicate sessions
-    const dupCheck = await client.query(
-      `SELECT id FROM exam_session
-       WHERE session_date = $1 AND start_time = $2 AND course_id = $3 AND exam_type_id = $4`,
-      [sessionDate, startTime, courseId, examTypeId]
-    );
-
-    if (dupCheck.rows.length > 0) {
-      results.errors.push({ row: rowNum, error: 'Duplicate session already exists', courseCode });
-      continue;
-    }
-
-    // ✅ Step 3: Insert exam session
-    const sessionInsert = await client.query(
-      `INSERT INTO exam_session 
-       (session_date, start_time, end_time, rooms_required, exam_type_id, course_id, status)
-       VALUES ($1, $2, $3, $4, $5::uuid, $6, 'open')
-       RETURNING id`,
-      [sessionDate, startTime, endTime, roomsRequired, examTypeId, courseId]
-    );
-
-    const sessionId = sessionInsert.rows[0].id;
-
-    // ✅ Step 4: Create room slots if none exist
-    const existingSlots = await client.query(
-      'SELECT COUNT(*) FROM session_room_slot WHERE session_id = $1',
-      [sessionId]
-    );
-
-    const slotCount = parseInt(existingSlots.rows[0].count, 10);
-    if (slotCount === 0) {
-      const slotValues = Array.from({ length: roomsRequired })
-        .map(() => `('${sessionId}', 'free')`)
-        .join(',');
-      await client.query(`INSERT INTO session_room_slot (session_id, status) VALUES ${slotValues}`);
-      results.sessionsCreated++;
-    } else {
-      console.log(`⚠️ Slots already exist for session ${sessionId}, skipping creation.`);
-    }
+    await client.query('COMMIT');
+    console.log('✅ Upload complete:', results);
+    res.json({ success: true, message: 'Upload successful', results });
 
   } catch (err) {
-    console.error(`❌ Error at row ${rowNum}:`, err.message);
-    results.errors.push({
-      row: rowNum,
-      courseCode: row['Course code'] || '',
-      error: err.message
-    });
+    await client.query('ROLLBACK');
+    console.error('❌ Upload failed:', err.message);
+    res.status(500).json({ error: 'Upload failed', details: err.message });
+  } finally {
+    client.release();
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
   }
-}
+});
 
 
     await client.query('COMMIT');
