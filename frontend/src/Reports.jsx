@@ -107,6 +107,29 @@ function Reports() {
       return;
     }
 
+    // For duty-summary report, use custom column ordering
+    if (reportType === 'duty-summary') {
+      const customData = reportData.map(row => ({
+        'Faculty Name': row.faculty_name,
+        'Cadre': row.cadre,
+        'Department': row.department,
+        'Email': row.email,
+        'Total Duties': row.total_duties,
+        'Session Times': row.session_times,
+        'Subjects': row.subjects,
+        'Duty Dates': row.duty_dates,
+        'Required Duties': row.required_duties
+      }));
+      
+      const worksheet = XLSX.utils.json_to_sheet(customData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Duty Summary');
+      
+      const fileName = `duty_summary_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      return;
+    }
+
     const worksheet = XLSX.utils.json_to_sheet(reportData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Report');
@@ -404,6 +427,32 @@ function Reports() {
       return;
     }
 
+    // For duty-summary report, use custom column ordering
+    if (reportType === 'duty-summary') {
+      const headers = ['Faculty Name', 'Cadre', 'Department', 'Email', 'Total Duties', 'Session Times', 'Subjects', 'Duty Dates', 'Required Duties'];
+      const csvContent = [
+        headers.join(','),
+        ...reportData.map(row => [
+          row.faculty_name,
+          row.cadre,
+          row.department,
+          row.email,
+          row.total_duties,
+          `"${row.session_times || ''}"`, // Wrap in quotes for comma-separated times
+          `"${row.subjects || ''}"`,       // Wrap in quotes for comma-separated subjects
+          `"${row.duty_dates || ''}"`,     // Wrap in quotes for comma-separated dates
+          row.required_duties
+        ].join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `duty_summary_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      return;
+    }
+
     const headers = Object.keys(reportData[0]);
     const csvContent = [
       headers.join(','),
@@ -590,6 +639,31 @@ function Reports() {
   const renderStandardTable = () => {
     if (reportData.length === 0) return null;
 
+    // Custom column headers for duty-summary report
+    const getColumnHeaders = () => {
+      if (reportType === 'duty-summary') {
+        return [
+          { key: 'faculty_name', label: 'Faculty Name' },
+          { key: 'cadre', label: 'Cadre' },
+          { key: 'department', label: 'Department' },
+          { key: 'email', label: 'Email' },
+          { key: 'total_duties', label: 'Total Duties' },
+          { key: 'session_times', label: 'Session Times' },
+          { key: 'subjects', label: 'Subjects' },
+          { key: 'duty_dates', label: 'Duty Dates' },
+          { key: 'required_duties', label: 'Required Duties' }
+        ];
+      }
+      
+      // Default headers for other report types
+      return Object.keys(reportData[0]).map(key => ({
+        key: key,
+        label: key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+      }));
+    };
+
+    const columns = getColumnHeaders();
+
     return (
       <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         <div className="p-4 bg-indigo-600 text-white">
@@ -599,9 +673,9 @@ function Reports() {
           <table className="w-full">
             <thead className="bg-gray-100">
               <tr>
-                {Object.keys(reportData[0]).map((key) => (
-                  <th key={key} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
-                    {key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                {columns.map((col) => (
+                  <th key={col.key} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                    {col.label}
                   </th>
                 ))}
               </tr>
@@ -609,9 +683,9 @@ function Reports() {
             <tbody>
               {reportData.map((row, idx) => (
                 <tr key={idx} className="border-b hover:bg-gray-50">
-                  {Object.values(row).map((value, i) => (
-                    <td key={i} className="px-4 py-3 text-sm text-gray-700">
-                      {value ?? '-'}
+                  {columns.map((col) => (
+                    <td key={col.key} className="px-4 py-3 text-sm text-gray-700">
+                      {row[col.key] ?? '-'}
                     </td>
                   ))}
                 </tr>
