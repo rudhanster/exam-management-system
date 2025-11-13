@@ -2198,26 +2198,23 @@ router.get('/reports/duty-summary', async (req, res) => {
         f.department,
         f.email,
         COUNT(DISTINCT srs.id) as total_duties,
-        COUNT(DISTINCT es.session_date) as unique_dates,
         STRING_AGG(DISTINCT TO_CHAR(es.session_date, 'DD-MM-YYYY'), ', ' 
           ORDER BY TO_CHAR(es.session_date, 'DD-MM-YYYY')) as duty_dates,
-        et.type_name as exam_type,
-        COALESCE(cdr.min_duties, 0) as required_duties,
-        CASE 
-          WHEN COUNT(DISTINCT srs.id) >= COALESCE(cdr.min_duties, 0) THEN 'Met'
-          WHEN COALESCE(cdr.min_duties, 0) - COUNT(DISTINCT srs.id) <= 1 THEN 'Warning'
-          ELSE 'Below Required'
-        END as compliance_status
+        STRING_AGG(DISTINCT 
+          CONCAT(es.start_time, '-', es.end_time), ', '
+          ORDER BY CONCAT(es.start_time, '-', es.end_time)) as session_times,
+        STRING_AGG(DISTINCT c.course_name, ', ' ORDER BY c.course_name) as subjects,
+        COALESCE(cdr.min_duties, 0) as required_duties
       FROM faculty f
       INNER JOIN session_room_slot srs ON f.id = srs.assigned_faculty_id
       INNER JOIN exam_session es ON srs.session_id = es.id
       INNER JOIN exam_type et ON es.exam_type_id = et.id
+      INNER JOIN course c ON srs.course_id = c.id
       LEFT JOIN cadre_duty_requirement cdr 
         ON cdr.cadre = f.cadre AND cdr.exam_type_id = es.exam_type_id
       ${whereClause}
       GROUP BY 
-        f.id, f.name, f.cadre, f.department, f.email, 
-        et.type_name, cdr.min_duties
+        f.id, f.name, f.cadre, f.department, f.email, cdr.min_duties
       ORDER BY f.name
     `;
 
